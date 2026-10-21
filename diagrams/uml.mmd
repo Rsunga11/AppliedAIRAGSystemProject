@@ -1,9 +1,16 @@
 classDiagram
-    class Owner {
-        +str name
-        +list~Pet~ pets
-        +add_pet(pet)
-        +get_all_tasks() list~Task~
+    class Task {
+        +str description
+        +str time
+        +int duration_minutes
+        +str priority
+        +str frequency
+        +date due_date
+        +bool completed
+        +mark_complete()
+        +next_occurrence() Task
+        +to_dict() dict
+        +from_dict(data) Task
     }
 
     class Pet {
@@ -11,22 +18,34 @@ classDiagram
         +str species
         +list~Task~ tasks
         +add_task(task)
+        +to_dict() dict
+        +from_dict(data) Pet
     }
 
-    class Task {
-        +str description
-        +str time
-        +str frequency
-        +bool completed
-        +mark_complete()
+    class Owner {
+        +str name
+        +list~Pet~ pets
+        +add_pet(pet)
+        +get_all_tasks() list~Task~
+        +save_to_json(path)
+        +load_from_json(path) Owner
     }
 
     class Scheduler {
         +Owner owner
-        +get_todays_schedule() list~Task~
-        +sort_by_time() list~Task~
+        +get_all_tasks() list~Task~
+        +get_todays_schedule(today) list~Task~
+        +sort_by_time(tasks) list~Task~
+        +sort_by_priority_then_time(tasks) list~Task~
+        +filter_tasks(pet_name, completed) list~Task~
+        +pet_for(task) Pet
+        +mark_task_complete(task) Task
+        +find_conflicts() list~str~
+        +next_available_slot(duration, day) str
+        +format_schedule(tasks) str
     }
 
     Owner "1" --> "*" Pet : has
     Pet "1" --> "*" Task : has
-    Scheduler --> Owner : reads tasks from
+    Scheduler --> Owner : reads tasks via get_all_tasks()
+    Task ..> Task : next_occurrence() creates the next copy
