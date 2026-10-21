@@ -148,3 +148,42 @@ def test_bad_time_is_rejected(bad_time):
 def test_bad_priority_is_rejected():
     with pytest.raises(ValueError):
         Task("Walk", "07:30", priority="urgent")
+
+
+# ---- extras: priority, next slot, persistence --------------------------------
+
+def test_sort_by_priority_then_time():
+    owner, dog, cat = make_owner()
+    dog.add_task(Task("Low early", "06:00", priority="low", due_date=TODAY))
+    dog.add_task(Task("High late", "20:00", priority="high", due_date=TODAY))
+    cat.add_task(Task("High early", "08:00", priority="high", due_date=TODAY))
+    names = [t.description for t in Scheduler(owner).sort_by_priority_then_time()]
+    assert names == ["High early", "High late", "Low early"]
+
+
+def test_next_available_slot_skips_busy_blocks():
+    owner, dog, _ = make_owner()
+    dog.add_task(Task("Walk", "07:30", 30, due_date=TODAY))
+    dog.add_task(Task("Feed", "08:00", 10, due_date=TODAY))
+    scheduler = Scheduler(owner)
+    assert scheduler.next_available_slot(20, day=TODAY) == "07:00"  # fits before the walk
+    assert scheduler.next_available_slot(60, day=TODAY) == "08:15"  # first gap after both tasks
+    assert scheduler.next_available_slot(15 * 60, day=TODAY) is None  # longer than the whole day
+
+
+def test_next_available_slot_on_empty_day_is_day_start():
+    owner, _, _ = make_owner()
+    assert Scheduler(owner).next_available_slot(30, day=TODAY) == "07:00"
+
+
+def test_json_round_trip(tmp_path):
+    owner, dog, _ = make_owner()
+    dog.add_task(Task("Walk", "07:30", 30, "high", "daily", due_date=TODAY))
+    path = tmp_path / "data.json"
+    owner.save_to_json(str(path))
+    assert Owner.load_from_json(str(path)) == owner
+
+
+def test_load_missing_file_raises():
+    with pytest.raises(FileNotFoundError):
+        Owner.load_from_json("does_not_exist.json")
