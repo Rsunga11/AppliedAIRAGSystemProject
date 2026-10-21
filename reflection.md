@@ -7,6 +7,10 @@
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
+The three things I want a pet owner to be able to do are: add a pet, schedule a care task (like a walk or feeding) for that pet at a certain time, and see today's tasks in order.
+
+My first UML had four classes. `Task` is one activity (description, time, frequency, whether it's done) and knows how to mark itself complete. `Pet` holds a pet's name and species plus its list of tasks. `Owner` holds the pets and has one method, `get_all_tasks()`, that returns every pet's tasks together. `Scheduler` is the "brain": it takes an `Owner` and reads tasks through that method so it works across all pets, not just one. I made `Task`, `Pet` and `Owner` dataclasses to keep them short, and left `Scheduler` as a normal class because it mostly holds behavior instead of data.
+
 **b. Design changes**
 
 - Did your design change during implementation?
