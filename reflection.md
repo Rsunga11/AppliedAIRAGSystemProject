@@ -30,6 +30,8 @@ My first UML had four classes. `Task` is one activity (description, time, freque
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
 
+My conflict detection only flags tasks that start at exactly the same date and time. It does not look at durations, so a 30-minute walk at 07:30 and a feeding at 07:45 would not be flagged even though they overlap. I kept it that way because exact-match checking is simple, easy to test and easy to explain, and a pet owner usually schedules in clean slots like 07:30 or 08:00. The cost is that overlaps can slip through, so the extra `next_available_slot` helper (see the README) does take durations into account when it looks for a free spot.
+
 ---
 
 ## 3. AI Collaboration
