@@ -243,14 +243,14 @@ class Scheduler:
         """Return a readable text table with status and priority icons."""
         if not tasks:
             return "(no tasks)"
-        lines = [f"{'':2} {'Time':<6} {'Task':<22} {'Pet':<9} {'Min':>4}  Priority"]
+        lines = [f"{'':2} {'Date':<5} {'Time':<6} {'Task':<22} {'Pet':<9} {'Min':>4}  Priority"]
         for task in tasks:
             pet = self.pet_for(task)
             status = "✅" if task.completed else "⏳"
             icon = task_icon(task.description)
             label = f"{icon} {task.description}"
             lines.append(
-                f"{status} {task.time:<6} {label:<22} {pet.name if pet else '?':<9} "
+                f"{status} {task.due_date:%m-%d} {task.time:<6} {label:<22} {pet.name if pet else '?':<9} "
                 f"{task.duration_minutes:>4}  {PRIORITY_ICONS[task.priority]} {task.priority}"
             )
         return "\n".join(lines)

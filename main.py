@@ -1,20 +1,18 @@
 """CLI demo for the PawPal+ logic layer (run: python main.py)."""
 
+import os
 import sys
-from datetime import date
+import tempfile
 
 from pawpal_system import Owner, Pet, Scheduler, Task
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")  # so emoji print on Windows terminals
 
-def print_schedule(title: str, scheduler: Scheduler, tasks) -> None:
-    """Print a list of tasks in a readable format."""
-    print(title)
-    print("-" * 52)
-    for task in tasks:
-        pet = scheduler.pet_for(task)
-        status = "done" if task.completed else "todo"
-        print(f"{task.due_date} {task.time}  {task.description:<16} {pet.name:<8} [{task.priority}] {status}")
-    print()
+
+def section(title: str) -> None:
+    """Print a heading line."""
+    print(f"\n== {title} ==")
 
 
 def main() -> None:
@@ -32,21 +30,33 @@ def main() -> None:
     mochi.add_task(Task("Flea medicine", "07:30", 5, "high", "weekly"))  # same time as the walk
     mochi.add_task(Task("Play session", "12:00", 20, "low"))
 
-    print_schedule("Today's Schedule (sorted by time)", scheduler, scheduler.get_todays_schedule())
+    section("Today's Schedule (sorted by time)")
+    print(scheduler.format_schedule(scheduler.get_todays_schedule()))
 
-    print("Conflict check")
-    print("-" * 52)
+    section("Conflict check")
     for warning in scheduler.find_conflicts() or ["No conflicts."]:
         print("WARNING:", warning)
-    print()
 
-    print_schedule("Only Mochi's tasks", scheduler, scheduler.sort_by_time(scheduler.filter_tasks(pet_name="Mochi")))
+    section("Only Mochi's tasks")
+    print(scheduler.format_schedule(scheduler.sort_by_time(scheduler.filter_tasks(pet_name="Mochi"))))
 
+    section("Priority first, then time")
+    print(scheduler.format_schedule(scheduler.sort_by_priority_then_time()))
+
+    section("Next free 45-minute slot today")
+    print(scheduler.next_available_slot(45))
+
+    section("Recurring task: complete the morning walk")
     walk = next(t for t in biscuit.tasks if t.description == "Morning walk")
     follow_up = scheduler.mark_task_complete(walk)
-    print(f"Marked '{walk.description}' complete -> next one is due {follow_up.due_date}")
-    print()
-    print_schedule("Pending tasks (completed=False)", scheduler, scheduler.sort_by_time(scheduler.filter_tasks(completed=False)))
+    print(f"'{walk.description}' done -> next one is due {follow_up.due_date}")
+    print(scheduler.format_schedule(scheduler.sort_by_time(scheduler.filter_tasks(pet_name="Biscuit"))))
+
+    section("Persistence: save to JSON and load it back")
+    path = os.path.join(tempfile.gettempdir(), "pawpal_demo.json")
+    owner.save_to_json(path)
+    print("Reloaded owner matches original:", Owner.load_from_json(path) == owner)
+    os.remove(path)
 
 
 if __name__ == "__main__":
