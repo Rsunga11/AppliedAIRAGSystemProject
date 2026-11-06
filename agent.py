@@ -38,24 +38,35 @@ class AgentResult:
         return bool(self.unresolved) or self.confidence < LOW_CONFIDENCE
 
 
-def find_overlaps(owner: Owner, day: date) -> List[str]:
-    """Return messages for open tasks on `day` whose time ranges overlap (catches more than exact-time matches)."""
+def overlap_pairs(owner: Owner, day: date) -> list:
+    """Return (pet_a, task_a, pet_b, task_b) for open tasks on `day` whose time ranges overlap.
+
+    This is stricter than Scheduler.find_conflicts(), which only compares exact start times.
+    """
     items = []
     for pet in owner.pets:
         for task in pet.tasks:
             if task.due_date == day and not task.completed:
                 start = to_minutes(task.time)
-                items.append((start, start + task.duration_minutes, pet.name, task.description))
-    items.sort()
-    messages = []
+                items.append((start, start + task.duration_minutes, pet, task))
+    items.sort(key=lambda item: (item[0], item[1]))
+    pairs = []
     for i in range(len(items)):
         for j in range(i + 1, len(items)):
             if items[j][0] >= items[i][1]:
                 break  # sorted by start, so nothing later can overlap item i
-            messages.append(
-                f"{items[i][3]} ({items[i][2]}) overlaps {items[j][3]} ({items[j][2]}) around {items[j][0] // 60:02d}:{items[j][0] % 60:02d}"
-            )
-    return messages
+            pairs.append((items[i][2], items[i][3], items[j][2], items[j][3]))
+    return pairs
+
+
+def describe_overlap(pair: tuple) -> str:
+    pet_a, task_a, pet_b, task_b = pair
+    return f"{task_a.description} ({pet_a.name}) overlaps {task_b.description} ({pet_b.name}) around {task_b.time}"
+
+
+def find_overlaps(owner: Owner, day: date) -> List[str]:
+    """Return a message for every pair of overlapping open tasks on `day`."""
+    return [describe_overlap(pair) for pair in overlap_pairs(owner, day)]
 
 
 class CarePlanAgent:
@@ -96,11 +107,20 @@ class CarePlanAgent:
             placed[id(p)] = task
         log(0, "act", "Placed all proposals at their preferred times in a scratch copy (real data untouched).")
 
+        proposed_ids = {id(t) for t in placed.values()}
+
+        def problems_with_my_tasks() -> List[str]:
+            """Only overlaps that involve a task I proposed. Existing clashes between other tasks are not my job."""
+            return [
+                describe_overlap(pair) for pair in overlap_pairs(scratch, day)
+                if id(pair[1]) in proposed_ids or id(pair[3]) in proposed_ids
+            ]
+
         unresolved: List[str] = []
         rounds = 0
         for rounds in range(1, self.max_rounds + 1):
             scheduler = Scheduler(scratch)
-            problems = scheduler.find_conflicts() + find_overlaps(scratch, day)
+            problems = problems_with_my_tasks()
             if not problems:
                 log(rounds, "check", "No conflicts or overlaps. Plan is consistent.")
                 break
@@ -130,8 +150,7 @@ class CarePlanAgent:
                 log(rounds, "check", "Could not resolve the remaining problems automatically; flagging for human review.")
                 break
         else:
-            scheduler = Scheduler(scratch)
-            unresolved = scheduler.find_conflicts() + find_overlaps(scratch, day)
+            unresolved = problems_with_my_tasks()
             if unresolved:
                 log(rounds, "check", "Still conflicting after the maximum number of rounds; flagging for human review.")
             else:

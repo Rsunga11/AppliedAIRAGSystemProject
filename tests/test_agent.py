@@ -117,3 +117,14 @@ def test_trace_formats_as_text_and_valid_json(agent):
     assert "Agent trace for Biscuit" in text and "[PLAN" in text
     data = json.loads(trace_to_json(result))
     assert data["pet"] == "Biscuit" and data["proposals"] and data["trace"]
+
+
+# ------------------------------------------------------- scope of the agent's job
+def test_agent_ignores_existing_clashes_between_other_tasks(agent):
+    owner, dog, cat = make_owner()
+    # The cat already has two overlapping tasks at night. That is not something the dog's plan caused.
+    cat.add_task(Task("Late play", "22:00", 30, due_date=TODAY))
+    cat.add_task(Task("Late cuddle", "22:10", 30, due_date=TODAY))
+    result = agent.run(owner, dog, day=TODAY)
+    assert result.unresolved == []
+    assert all("Late" not in str(step["detail"]) for step in result.trace)

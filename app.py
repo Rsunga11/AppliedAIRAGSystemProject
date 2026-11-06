@@ -3,13 +3,41 @@ from datetime import date
 
 import streamlit as st
 
+from advisor import CareAdvisor, configure_logging
+from agent import CarePlanAgent, format_trace
+from llm import from_env
 from pawpal_system import PRIORITY_ICONS, Owner, Pet, Scheduler, Task, task_icon
+from retriever import KnowledgeBase
 
 DATA_FILE = "data.json"
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 st.title("🐾 PawPal+")
-st.caption("A pet care planner that sorts, filters, repeats tasks and warns you about conflicts.")
+st.caption("A pet care planner that sorts, filters, repeats tasks, warns you about conflicts, and has an AI care advisor.")
+
+configure_logging()
+
+
+@st.cache_resource
+def load_advisor() -> CareAdvisor:
+    """Build the retrieval index once. Uses Gemini only if GEMINI_API_KEY is set; otherwise fully offline."""
+    return CareAdvisor(KnowledgeBase(), llm=from_env())
+
+
+advisor = load_advisor()
+agent = CarePlanAgent(advisor)
+
+
+def show_review(review) -> None:
+    """Show an advisor review of a task with its confidence and source."""
+    detail = f" (confidence {review.confidence:.2f}; source: {', '.join(review.sources)})" if review.sources else ""
+    if review.status == "warn":
+        st.warning("🩺 Advisor: " + " ".join(review.messages) + detail)
+    elif review.status == "ok":
+        st.info("🩺 Advisor: " + " ".join(review.messages) + detail)
+    else:
+        st.caption("🩺 Advisor: no care guidance for this kind of task, so it was not checked.")
+
 
 # Streamlit reruns this whole script on every click, so the Owner has to live in
 # session_state. On the very first run we also try to load saved data.
@@ -66,18 +94,18 @@ if owner.pets:
                 st.error("Describe the task first.")
             else:
                 pet = next(p for p in owner.pets if p.name == pet_choice)
-                pet.add_task(
-                    Task(
-                        description.strip(),
-                        time_value.strftime("%H:%M"),
-                        int(duration),
-                        priority,
-                        frequency,
-                        due_date=task_date,
-                    )
+                new_task = Task(
+                    description.strip(),
+                    time_value.strftime("%H:%M"),
+                    int(duration),
+                    priority,
+                    frequency,
+                    due_date=task_date,
                 )
+                pet.add_task(new_task)
                 save()
                 st.success(f"Added '{description.strip()}' for {pet_choice}.")
+                show_review(advisor.review_task(pet, new_task))  # RAG-backed check of the new task
 else:
     st.info("Add a pet first, then you can schedule tasks for it.")
 
@@ -150,3 +178,62 @@ if st.button("Find next free slot"):
         st.success(f"Earliest free {int(slot_minutes)}-minute slot on {slot_day}: {slot}")
     else:
         st.warning("No free slot of that length between 07:00 and 21:00.")
+
+# ------------------------------------------------------------ AI: ask the advisor
+st.subheader("5. Ask the Care Advisor")
+st.caption(
+    "Answers come from the pet-care notes in `knowledge/` (retrieval), not from guesswork. "
+    + ("Gemini is on: it rewrites the retrieved notes." if advisor.llm else "Offline mode: answers come straight from the notes.")
+)
+question = st.text_input("Your question", placeholder="How long should I walk my dog?")
+ask_species = st.selectbox("About which pet type?", ["any", "dog", "cat", "other"])
+if st.button("Ask"):
+    answer = advisor.answer_question(question, None if ask_species == "any" else ask_species)
+    if answer.refused:
+        st.warning(answer.text)
+    else:
+        st.write(answer.text)
+        st.caption(
+            f"Confidence: {answer.confidence:.2f} | "
+            + ("Explained by Gemini from the notes" if answer.used_llm else "Answered from local notes (offline)")
+        )
+        if answer.needs_review:
+            st.warning("Low confidence: please double-check with a veterinarian.")
+        if answer.sources:
+            with st.expander("Sources"):
+                for source in answer.sources:
+                    st.write("• " + source)
+
+# ----------------------------------------------------------- AI: care plan agent
+st.subheader("6. Suggest a care plan (AI agent)")
+st.caption("The agent proposes routine tasks, checks them for conflicts, fixes what it can, and waits for your approval.")
+if owner.pets:
+    plan_pet_name = st.selectbox("Pet", [p.name for p in owner.pets], key="plan_pet")
+    if st.button("Suggest a plan"):
+        plan_pet = next(p for p in owner.pets if p.name == plan_pet_name)
+        st.session_state.plan = (plan_pet.name, agent.run(owner, plan_pet))
+
+    if "plan" in st.session_state:
+        planned_name, result = st.session_state.plan
+        planned_pet = next((p for p in owner.pets if p.name == planned_name), None)
+        if planned_pet is None or not result.proposals:
+            st.info(f"Nothing to add: {planned_name} already has the routine tasks I know about.")
+        else:
+            st.markdown(f"**Proposed tasks for {planned_name}** (confidence {result.confidence:.2f})")
+            approved = []
+            for index, proposal in enumerate(result.proposals):
+                label = f"{task_icon(proposal.description)} {proposal.time} - {proposal.description} ({proposal.duration_minutes} min, {proposal.priority})"
+                if st.checkbox(label, value=True, key=f"approve_{index}"):
+                    approved.append(index)
+            if result.needs_review:
+                st.warning("The agent could not fully resolve these issues, so please review: " + " | ".join(result.unresolved))
+            with st.expander("Agent reasoning trace"):
+                st.code(format_trace(result))
+            if st.button("Add approved tasks"):
+                added = agent.apply(planned_pet, result, approved)
+                save()
+                del st.session_state.plan
+                st.success(f"Added {len(added)} task(s) to {planned_name}.")
+                st.rerun()
+else:
+    st.info("Add a pet first.")
