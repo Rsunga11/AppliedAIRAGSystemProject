@@ -331,6 +331,12 @@ This project showed me that the hard part of an AI feature is rarely the model c
 
 *Process note: Claude Code built most of this project under my direction. I set the scope, reviewed the code and ran the tests, harness and app myself to check the results.*
 
+## Presentation notebook
+
+[`presentation.ipynb`](presentation.ipynb) is a live demo for the 5-7 minute presentation: markdown cells are the "slides" and code cells run the real system (RAG answers, guardrails, task review, the agent trace with human approval, the 35-case harness, and the optional Gemini step). The saved outputs are included, so it also reads correctly on GitHub without running anything.
+
+To run it in VS Code: `pip install -r requirements-notebook.txt`, open the notebook, pick the `.venv` kernel, and use **Run All**. If you add a key to `.env`, the Gemini cell uses it; otherwise it stays offline.
+
 ## Project layout
 
 ```
@@ -346,6 +352,7 @@ knowledge/             pet-care documents used for retrieval
 diagrams/              architecture.mmd (Mermaid source)
 logs/eval_results.txt  latest evaluation output
 tests/                 pytest suite
+presentation.ipynb     live demo notebook for the presentation
 model_card.md          responsible-AI reflection
 ai_interactions.md     agent reasoning traces
 ```

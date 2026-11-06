@@ -1,0 +1,4 @@
+# Only needed to run presentation.ipynb in VS Code or Jupyter
+ipykernel
+nbclient
+nbformat
