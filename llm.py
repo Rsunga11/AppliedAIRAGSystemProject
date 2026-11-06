@@ -16,7 +16,9 @@ from typing import List, Optional
 
 logger = logging.getLogger("pawpal")
 
-DEFAULT_MODEL = "gemini-2.0-flash"
+# A "-latest" alias survives model renames; older names (e.g. gemini-2.0-flash) return 404 for new keys.
+# Override with GEMINI_MODEL. Any failure falls back to the offline answer.
+DEFAULT_MODEL = "gemini-flash-lite-latest"
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 MAX_ANSWER_CHARS = 600
 # Reject model output that sounds like medical advice (a second guardrail after the input check).
@@ -63,7 +65,7 @@ class GeminiClient:
         body = json.dumps(
             {
                 "contents": [{"parts": [{"text": PROMPT_TEMPLATE.format(notes=notes, question=question)}]}],
-                "generationConfig": {"temperature": 0.2, "maxOutputTokens": 200},
+                "generationConfig": {"temperature": 0.2, "maxOutputTokens": 300},
             }
         ).encode("utf-8")
         request = urllib.request.Request(

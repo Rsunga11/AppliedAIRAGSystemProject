@@ -18,7 +18,7 @@
 - **Keyword matching, not understanding.** Retrieval matches words, so a short or unusual question can miss (for example "can dogs have xylitol" scored too low and got an "I don't know", even though the notes cover it). The medical guardrail is a keyword pattern, so a cleverly reworded dangerous question could slip past it, and a harmless question that uses a trigger word (like "ill" or "pain") will be refused.
 - **Confidence is a heuristic, not a probability.** It combines retrieval similarity and whether the topic matched. It is not calibrated, so 0.8 does not mean "right 80% of the time".
 - **The agent is simple.** It places tasks in the next free slot, but it does not understand spacing rules (a second feeding can be pushed a few hours late) and it plans one day at a time.
-- **Test coverage is self-written.** The 35 harness cases and 92 tests were written by the same people who wrote the system, so they prove less than an independent evaluation would. Gemini behavior is covered by mocked tests; a live call is not part of the automated evidence.
+- **Test coverage is self-written.** The 35 harness cases and 92 tests were written by the same people who wrote the system, so they prove less than an independent evaluation would. Gemini behavior is covered by mocked tests, and I checked the live API by hand once (below), but a live call is not part of the automated evidence and Gemini's free tier can return 503s or retire a model name.
 - **Assumes the owner's time is the only constraint** (two pets walked at once count as a conflict) and that all tasks start and end on the same day.
 
 ## Could the AI be misused, and how is that prevented?
@@ -33,6 +33,7 @@
 - My first set of 24 test cases passed 100%, which told me very little, because I had written them. Probing with deliberately tricky questions found three real problems (the guardrail missed drug names like ibuprofen and tylenol and "my dog ate a grape"; a goldfish question got dog advice at 0.73 confidence; and the puppy question got the adult-dog answer).
 - The agent worked in the unit tests, but running the demo showed it was counting overlaps between *other* tasks as its own unresolved problems. I only noticed because the demo output looked noisy.
 - Retrieval confidence was higher than I expected for wrong-species matches until I added an unsupported-animal check, so a high score is not the same as a correct answer.
+- The first live Gemini attempts failed for reasons no unit test had predicted: a retired model name (404) and a temporary overload (503). The offline fallback is what kept the app working, so that part of the design proved itself. Gemini's wording also drifted slightly from the notes style (it opens with "Hello!"), and I only know its facts were grounded because I compared them to the retrieved text.
 - With retrieval the answers contained the expected fact in 10 of 10 questions, and without retrieval 0 of 10. That comparison used a trivially generic baseline, so it shows retrieval is doing something, not that it is great.
 
 ## Testing results
@@ -43,7 +44,8 @@
 | `python eval_harness.py` | 35 of 35 cases passed (retrieval 10/10, guardrail 13/13, out-of-scope 4/4, task review 5/5, agent 3/3) |
 | Average confidence on answerable questions | 0.73 |
 | Retrieval vs. no-retrieval baseline (expected fact present) | 10/10 vs. 0/10 |
-| Live Gemini call | Not run in the automated evidence; covered by mocked tests for success, HTTP errors, timeouts, bad JSON, unsafe output and key secrecy |
+| Live Gemini call (manual, 2026-11-05) | Worked with `gemini-flash-lite-latest`: answers grounded in the retrieved notes, `used_llm=True`, and the medical and off-topic questions never reached the model. `gemini-2.0-flash` and `gemini-2.5-flash` returned HTTP 404 and the newest model returned 503; the system fell back to offline answers each time |
+| Gemini failure handling (automated, mocked) | Success, HTTP 400/403/429/500, timeouts, bad JSON, empty and unsafe output, and key secrecy are all covered |
 
 ## Collaboration with AI
 

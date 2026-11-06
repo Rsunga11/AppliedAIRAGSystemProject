@@ -110,7 +110,7 @@ source .venv/bin/activate        # Windows PowerShell: .\.venv\Scripts\Activate.
 pip install -r requirements.txt
 ```
 
-**Optional: turn on Gemini.** Copy `.env.example` to `.env` and put your own free key from aistudio.google.com in it (`GEMINI_API_KEY=...`). `.env` is git-ignored, and the key is only sent as a request header and never logged. Skip this to stay fully offline. `GEMINI_MODEL` can override the default model name.
+**Optional: turn on Gemini.** Copy `.env.example` to `.env` and put your own free key from aistudio.google.com in it (`GEMINI_API_KEY=...`). `.env` is git-ignored, and the key is only sent as a request header and never logged. Skip this to stay fully offline. `GEMINI_MODEL` can override the default model name (the default is the `gemini-flash-lite-latest` alias, because specific names get retired; see the testing summary).
 
 **Run it:**
 
@@ -202,6 +202,30 @@ Added: ['Morning walk', 'Evening walk', 'Morning feeding']
 Overlaps involving the newly added tasks: none
 ```
 
+### 5. Optional: the same questions with Gemini turned on
+
+Input: the same questions with `GEMINI_API_KEY` set (model `gemini-flash-lite-latest`). I ran this once by hand on 2026-11-05. Gemini rewrites only the retrieved notes. The refused question and the off-topic question never reach Gemini (they are stopped before the model call), so their output is identical to offline mode.
+
+```
+Q: How long should I walk my dog?
+used_llm=True refused=False confidence=0.82 sources=['dog_care.md: Dog walks and exercise']
+A: Hello! Most adult dogs need 30 to 60 minutes of walking or active play daily, ideally split into morning and evening walks. High-energy breeds may need even more. Just remember that walks shorter than 15 minutes are usually not enough!
+
+Q: How often should I feed my cat?
+used_llm=True refused=False confidence=0.93 sources=['cat_care.md: Cat feeding']
+A: Hello! Adult cats are usually fed two measured meals a day, about 10 to 12 hours apart (like breakfast at 08:00 and dinner at 18:30). Some cats do well with small meals throughout the day, while kittens need three to four meals a day.
+
+Q: Can I give my dog ibuprofen?
+used_llm=False refused=True confidence=1.0 sources=['medication_and_vet_safety.md: Dosage and diagnosis questions']
+A: I can't give medical advice, dosages or diagnoses. Please contact a licensed veterinarian. In an emergency, call an emergency vet or an animal poison control hotline right away.
+
+Q: Why is the sky blue?
+used_llm=False refused=False confidence=0.0 sources=[]
+A: I couldn't find reliable guidance for that in my pet-care notes. Please ask a veterinarian or check a trusted pet-care source.
+```
+
+Every fact in the Gemini answers came from the retrieved notes (including the kitten detail from the cat-feeding section). One quirk: it opens with "Hello!", which the prompt doesn't ask for.
+
 ## Reliability and guardrail results
 
 `python eval_harness.py` runs 35 predefined cases in offline mode and saves the output to [`logs/eval_results.txt`](logs/eval_results.txt):
@@ -288,6 +312,7 @@ Other reliability measures:
 
 - **What worked:** 92 pytest tests pass (the original 23 scheduler tests plus tests for retrieval, the advisor and its guardrails, the agent loop, the Gemini wrapper with mocked failures, and logging). The harness passes 35 of 35 cases, and retrieval answers contained the expected fact in 10 of 10 questions versus 0 of 10 for a no-retrieval baseline.
 - **What didn't, at first:** the harness passed on my first set of cases, so I tried harder, tricky inputs. That found real gaps: "Can I give my dog ibuprofen?", "Is tylenol ok for my cat?" and "my dog ate a grape" were *not* refused; "What should I feed my goldfish?" was answered with dog feeding advice at 0.73 confidence; and "How many meals does a puppy need?" returned the adult-dog sentences. I fixed these (broader medical patterns, an unsupported-animal check, picking the sentences that best match the question) and kept every one of those inputs as a regression test and harness case. A separate bug was found when running the demo: the agent was reporting overlaps between *other* tasks as its own unresolved problems, so it now only counts overlaps that involve tasks it proposed.
+- **A live-API lesson:** my first default model name (`gemini-2.0-flash`) returned HTTP 404 for a new key, and the next one I tried (`gemini-2.5-flash`) did too, with the message "no longer available to new users". The newest model returned HTTP 503 "high demand" for a while. The app kept working through all of this because every Gemini failure falls back to the offline answer (that fallback is what the mocked tests check). The fix was to default to a `-latest` alias and to list the models the key can use before choosing one.
 - **What I learned:** passing your own tests proves little, because the cases are written by the same person who wrote the code. The useful work was trying to break it. The remaining weaknesses are listed in `model_card.md`.
 
 ## Stretch features included
