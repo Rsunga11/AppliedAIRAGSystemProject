@@ -1,0 +1,69 @@
+flowchart TD
+    User([Pet owner])
+
+    subgraph UI["Interfaces"]
+        App["Streamlit app (app.py)"]
+        CLI["CLI demo (main.py)"]
+        Harness["Test harness (eval_harness.py)"]
+    end
+
+    subgraph Core["PawPal+ core (Module 2 logic layer)"]
+        Owner["Owner / Pet / Task (pawpal_system.py)"]
+        Sched["Scheduler: sort, filter, conflicts, next free slot, recurrence"]
+        Data[("data.json")]
+    end
+
+    subgraph AI["AI layer (new in this project)"]
+        Guard["Input guardrails: empty, too long, medical, unsupported animal"]
+        KB[("knowledge/*.md pet-care documents")]
+        Retriever["Retriever: TF-IDF chunk search (retriever.py)"]
+        Advisor["Care Advisor: answer, review task, propose tasks (advisor.py)"]
+        Conf["Confidence score and source citations"]
+        Agent["Care Plan Agent: plan, act, check, re-plan (agent.py)"]
+        Gemini["Optional Gemini rewrite (llm.py)"]
+        OutGuard["Output guardrail and offline fallback"]
+    end
+
+    Log[("logs/pawpal.log")]
+    Human{{"Human approves proposals"}}
+    Tests["pytest suite (92 tests) and eval results"]
+
+    User --> App
+    User --> CLI
+    App --> Owner
+    App --> Sched
+    Owner <--> Data
+    Sched --> Owner
+
+    App -->|question| Guard
+    Guard -->|refuse and refer to a vet| User
+    Guard -->|safe question| Advisor
+    Advisor --> Retriever
+    Retriever --> KB
+    Retriever -->|ranked chunks and scores| Advisor
+    Advisor -->|retrieved snippets only| Gemini
+    Gemini --> OutGuard
+    OutGuard -->|safe text, or offline answer if it fails| Advisor
+    Advisor --> Conf
+    Conf -->|answer, sources, confidence, needs-review flag| User
+
+    App -->|new task| Advisor
+    Advisor -->|warn if outside retrieved guidance| User
+
+    App -->|suggest a plan| Agent
+    Agent -->|needs care guidance| Advisor
+    Agent -->|checks free slots and overlaps on a scratch copy| Sched
+    Agent -->|proposals and reasoning trace| Human
+    Human -->|approved tasks only| Owner
+
+    Guard -.-> Log
+    Advisor -.-> Log
+    Agent -.-> Log
+    Gemini -.-> Log
+
+    Harness -->|35 predefined cases| Guard
+    Harness --> Advisor
+    Harness --> Agent
+    Harness -->|pass/fail summary| Tests
+    Tests -.->|verifies| AI
+    Tests -.->|verifies| Core
