@@ -45,10 +45,13 @@ def tokenize(text: str) -> List[str]:
     for word in re.findall(r"[a-z]+", text.lower()):
         if word in STOPWORDS or len(word) < 2:
             continue
-        for suffix in ("ing", "es", "ed", "s"):
-            if word.endswith(suffix) and len(word) - len(suffix) >= 3:
-                word = word[: -len(suffix)]
-                break
+        if word.endswith("ies") and len(word) > 4:
+            word = word[:-3] + "y"  # puppies -> puppy
+        else:
+            for suffix in ("ing", "es", "ed", "s"):
+                if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+                    word = word[: -len(suffix)]
+                    break
         tokens.append(word)
     return tokens
 

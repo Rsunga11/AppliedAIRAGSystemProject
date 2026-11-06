@@ -14,7 +14,7 @@ from datetime import date
 from typing import List, Optional, Tuple
 
 from pawpal_system import Pet, Task
-from retriever import Chunk, Hit, KnowledgeBase
+from retriever import Chunk, Hit, KnowledgeBase, tokenize
 
 logger = logging.getLogger("pawpal")
 logger.addHandler(logging.NullHandler())  # stay quiet unless configure_logging() is called
@@ -30,8 +30,18 @@ VET_DISCLAIMER = (
 )
 # Questions matching these must never be answered from the knowledge base.
 UNSAFE_PATTERN = re.compile(
-    r"\b(dose|dosage|dosing|overdose|mg|milligram|how much (medicine|medication|ibuprofen|tylenol|aspirin)"
-    r"|diagnos\w*|symptom\w*|vomit\w*|bleed\w*|seizure\w*|limp\w*|poison\w*|emergency|sick|infection)\b",
+    r"\b(dose|dosage|dosing|overdose|mg|milligram\w*|ml"
+    r"|ibuprofen|tylenol|acetaminophen|aspirin|advil|antibiotic\w*|painkiller\w*|human medicine"
+    r"|(can|should|may|is it (ok|okay|safe) to) i give\b.*\b(medicine|medication|pill\w*|tablet\w*)"
+    r"|diagnos\w*|symptom\w*|vomit\w*|throw\w* up|throwing up|diarrhea|bleed\w*|blood|seizure\w*|limp\w*"
+    r"|lump\w*|swollen|swelling|injur\w*|hurt\w*|in pain|pain|sick|ill|infect\w*|euthan\w*"
+    r"|poison\w*|emergency|ate (a|an|the|some)|eaten|swallow\w*)\b",
+    re.IGNORECASE,
+)
+# Animals the knowledge base has no notes for: say so instead of answering with dog or cat advice.
+UNSUPPORTED_ANIMALS = re.compile(
+    r"\b(fish|goldfish|bird|birds|parrot\w*|budgie\w*|hamster\w*|guinea pig\w*|snake\w*|lizard\w*|gecko\w*"
+    r"|turtle\w*|tortoise\w*|horse\w*|ferret\w*|chicken\w*|hedgehog\w*)\b",
     re.IGNORECASE,
 )
 
@@ -227,6 +237,15 @@ class CareAdvisor:
                 logger.warning("guardrail: refused medical question")
                 return Answer(VET_DISCLAIMER, 1.0, ["medication_and_vet_safety.md: Dosage and diagnosis questions"], refused=True)
 
+            if UNSUPPORTED_ANIMALS.search(question):
+                logger.info("guardrail: unsupported animal")
+                return Answer(
+                    "My notes only cover dogs, cats and small pets like rabbits, so I can't give reliable "
+                    "advice for that animal. Please ask a veterinarian who treats it.",
+                    0.0,
+                    [],
+                )
+
             hits = self.kb.search(question, k=3, species=species)
             if not hits or hits[0].score < MIN_RETRIEVAL_SCORE:
                 logger.info("answer: no reliable match for question")
@@ -239,7 +258,7 @@ class CareAdvisor:
 
             sources = [f"{h.chunk.source}: {h.chunk.title}" for h in hits]
             confidence = _confidence(hits[0], True)
-            text = self._compose_offline(hits[0].chunk)
+            text = self._compose_offline(hits[0].chunk, question)
             used_llm = False
             if self.llm is not None:
                 snippets = [h.chunk.text for h in hits]
@@ -253,10 +272,15 @@ class CareAdvisor:
             return Answer("Sorry, something went wrong answering that. Please try again.", 0.0, [], refused=True)
 
     @staticmethod
-    def _compose_offline(chunk: Chunk) -> str:
-        """Offline answer: the first two sentences of the best chunk."""
+    def _compose_offline(chunk: Chunk, question: str = "") -> str:
+        """Offline answer: the two sentences of the best chunk that share the most words with the question."""
         sentences = re.split(r"(?<=[.!?])\s+", chunk.text)
-        return " ".join(sentences[:2])
+        wanted = set(tokenize(question))
+        scores = [len(wanted & set(tokenize(s))) for s in sentences]
+        if not any(scores):
+            return " ".join(sentences[:2])
+        best = sorted(sorted(range(len(sentences)), key=lambda i: -scores[i])[:2])  # top 2, original order
+        return " ".join(sentences[i] for i in best)
 
     # ------------------------------------------------------------- proposals
     def recommend_tasks(self, pet: Pet) -> List[Proposal]:
