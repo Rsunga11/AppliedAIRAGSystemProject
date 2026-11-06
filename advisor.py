@@ -10,6 +10,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from typing import List, Optional, Tuple
 
 from pawpal_system import Pet, Task
@@ -118,10 +119,14 @@ class Proposal:
     topic: str
     source: str
     confidence: float
+    due: Optional[date] = None  # None means "today"
 
     def to_task(self) -> Task:
         """Build the real Task for this proposal (call only after approval)."""
-        return Task(self.description, self.time, self.duration_minutes, self.priority, self.frequency)
+        task = Task(self.description, self.time, self.duration_minutes, self.priority, self.frequency)
+        if self.due is not None:
+            task.due_date = self.due
+        return task
 
 
 def detect_topic(description: str) -> Optional[str]:
