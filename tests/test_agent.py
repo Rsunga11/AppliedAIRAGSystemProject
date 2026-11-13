@@ -128,3 +128,19 @@ def test_agent_ignores_existing_clashes_between_other_tasks(agent):
     result = agent.run(owner, dog, day=TODAY)
     assert result.unresolved == []
     assert all("Late" not in str(step["detail"]) for step in result.trace)
+
+
+# ------------------------------------------------------ one rule for "overlap"
+def test_overlap_rule_is_shared_and_back_to_back_is_not_an_overlap():
+    from pawpal_system import ranges_overlap
+
+    assert ranges_overlap(0, 30, 29, 40)
+    assert not ranges_overlap(0, 30, 30, 40)  # back-to-back
+    a = Task("A", "07:00", 30, due_date=TODAY)
+    b = Task("B", "07:30", 10, due_date=TODAY)
+    c = Task("C", "07:29", 10, due_date=TODAY)
+    assert not a.overlaps(b) and a.overlaps(c)
+    # the scheduler's free-slot search uses the same rule, so it never proposes a slot the agent would flag
+    owner, dog, _ = make_owner()
+    dog.add_task(a)
+    assert Scheduler(owner).next_available_slot(30, day=TODAY, day_start="07:00") == "07:30"

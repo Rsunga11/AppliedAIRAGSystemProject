@@ -27,7 +27,7 @@ def reply(text):
 
 
 def client_returning(text):
-    return GeminiClient(SECRET, opener=lambda request, timeout: reply(text))
+    return GeminiClient(SECRET, style="baseline", opener=lambda request, timeout: reply(text))
 
 
 def test_successful_call_returns_text_and_sends_key_only_in_header():
@@ -39,7 +39,7 @@ def test_successful_call_returns_text_and_sends_key_only_in_header():
         seen["prompt"] = json.loads(request.data)["contents"][0]["parts"][0]["text"]
         return reply("Walk your dog about 30 to 60 minutes a day.")
 
-    client = GeminiClient(SECRET, opener=opener)
+    client = GeminiClient(SECRET, style="baseline", opener=opener)
     text = client.explain("How long should I walk my dog?", ["Most adult dogs need 30 to 60 minutes."])
     assert text == "Walk your dog about 30 to 60 minutes a day."
     assert seen["key_header"] == SECRET
@@ -53,7 +53,7 @@ def test_http_errors_return_none(status):
     def opener(request, timeout):
         raise urllib.error.HTTPError(request.full_url, status, "error", {}, None)
 
-    assert GeminiClient(SECRET, opener=opener).explain("q", ["note"]) is None
+    assert GeminiClient(SECRET, style="baseline", opener=opener).explain("q", ["note"]) is None
 
 
 def test_network_errors_and_bad_json_return_none():
@@ -67,7 +67,7 @@ def test_network_errors_and_bad_json_return_none():
         return FakeResponse(b'{"candidates": []}')
 
     for opener in (timeout, garbage, wrong_shape):
-        assert GeminiClient(SECRET, opener=opener).explain("q", ["note"]) is None
+        assert GeminiClient(SECRET, style="baseline", opener=opener).explain("q", ["note"]) is None
 
 
 @pytest.mark.parametrize("unsafe", ["Give 200 mg twice a day.", "The dosage is small.", "That sounds like a diagnosis."])
@@ -85,7 +85,7 @@ def test_api_key_never_appears_in_logs(caplog):
         raise urllib.error.HTTPError(request.full_url, 403, "forbidden", {}, None)
 
     with caplog.at_level(logging.DEBUG, logger="pawpal"):
-        GeminiClient(SECRET, opener=opener).explain("q", ["note"])
+        GeminiClient(SECRET, style="baseline", opener=opener).explain("q", ["note"])
     assert SECRET not in caplog.text
     assert "HTTP 403" in caplog.text
 
@@ -123,7 +123,7 @@ def test_advisor_uses_gemini_text_when_it_works_and_falls_back_when_it_fails():
     def failing(request, timeout):
         raise TimeoutError("no network")
 
-    bad = CareAdvisor(kb, llm=GeminiClient(SECRET, opener=failing))
+    bad = CareAdvisor(kb, llm=GeminiClient(SECRET, style="baseline", opener=failing))
     fallback = bad.answer_question("How long should I walk my dog?", "dog")
     assert not fallback.used_llm and "30 to 60 minutes" in fallback.text  # offline answer still works
 
@@ -135,6 +135,57 @@ def test_medical_questions_never_reach_the_llm():
         calls.append(request)
         return reply("anything")
 
-    advisor = CareAdvisor(KnowledgeBase(), llm=GeminiClient(SECRET, opener=opener))
+    advisor = CareAdvisor(KnowledgeBase(), llm=GeminiClient(SECRET, style="baseline", opener=opener))
     assert advisor.answer_question("What dosage of ibuprofen can my dog have?").refused
     assert calls == []  # the guardrail runs before any model call
+
+
+# ------------------------------------------------------------ specialized (few-shot) style
+GOOD = "Answer: Adult dogs need 30 to 60 minutes of walking a day. Tip: Split it into a morning and an evening walk."
+
+
+def specialized(text):
+    return GeminiClient(SECRET, style="specialized", opener=lambda request, timeout: reply(text))
+
+
+def test_specialized_prompt_has_few_shot_examples_and_strict_rules():
+    seen = {}
+
+    def opener(request, timeout):
+        seen["prompt"] = json.loads(request.data)["contents"][0]["parts"][0]["text"]
+        return reply(GOOD)
+
+    GeminiClient(SECRET, style="specialized", opener=opener).explain("How long should I walk my dog?", ["Dogs need 30 to 60 minutes."])
+    prompt = seen["prompt"]
+    assert prompt.count("Example ") == 3 and "PawPal Coach" in prompt
+    assert "No greetings" in prompt and "Dogs need 30 to 60 minutes." in prompt
+
+
+def test_specialized_style_accepts_a_conforming_reply():
+    assert specialized(GOOD).explain("q", ["note"]) == GOOD
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "Hello! Adult dogs need 30 to 60 minutes of walking.",
+        "Answer: Dogs need 30 to 60 minutes. Tip: Walk twice a day!",
+        "Answer: Dogs need walks.",
+        "Answer: " + "word " * 50 + "Tip: ok.",
+        "Answer: Dogs need walks.\nTip: Twice a day.",
+    ],
+)
+def test_specialized_style_rejects_off_contract_replies(bad):
+    assert specialized(bad).explain("q", ["note"]) is None  # the advisor then uses its offline answer
+    assert specialized(bad).explain("q", ["note"], enforce_style=False) is not None  # still measurable
+
+
+def test_unknown_style_is_rejected():
+    with pytest.raises(ValueError):
+        GeminiClient(SECRET, style="pirate")
+
+
+def test_from_env_uses_the_specialized_style_by_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("GEMINI_API_KEY", SECRET)
+    monkeypatch.chdir(tmp_path)
+    assert from_env().style == "specialized"

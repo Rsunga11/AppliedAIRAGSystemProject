@@ -19,6 +19,26 @@ def section(title: str) -> None:
     print(f"\n== {title} ==")
 
 
+LAST_AGENT_RESULT = None  # the Rex run from the most recent ai_demo(); generate_evidence.py reads it
+
+
+def demo_agent_run(owner: Owner, agent: CarePlanAgent):
+    """The one Rex scenario used by the CLI, the README and the traces: a dog with a 07:30 vet call asks for a plan."""
+    rex = Pet("Rex", "dog")
+    owner.add_pet(rex)
+    rex.add_task(Task("Vet call", "07:30", 20, "high"))  # already blocks the morning routine slot
+    return rex, agent.run(owner, rex)
+
+
+def demo_unfixable_run(advisor: CareAdvisor):
+    """A day that cannot be fixed: one appointment fills 07:00-21:00, so the agent must flag it for review."""
+    owner = Owner("Full")
+    busy = Pet("Busy", "dog")
+    owner.add_pet(busy)
+    busy.add_task(Task("All-day appointment", "07:00", 840, "high"))
+    return CarePlanAgent(advisor).run(owner, busy)
+
+
 def ai_demo(owner: Owner, biscuit: Pet) -> None:
     """Show the Care Advisor (RAG), its guardrails, and the plan/act/check agent."""
     configure_logging()
@@ -53,10 +73,9 @@ def ai_demo(owner: Owner, biscuit: Pet) -> None:
 
     section("Agent: plan -> act -> check -> re-plan (proposals only)")
     agent = CarePlanAgent(advisor)
-    fresh = Pet("Rex", "dog")
-    owner.add_pet(fresh)
-    fresh.add_task(Task("Vet call", "07:30", 20, "high"))  # already blocks the morning routine slot
-    result = agent.run(owner, fresh)
+    global LAST_AGENT_RESULT
+    fresh, result = demo_agent_run(owner, agent)
+    LAST_AGENT_RESULT = result
     print(format_trace(result))
     print(f"\nTasks on Rex BEFORE approval: {len(fresh.tasks)} (only the existing 'Vet call'; the agent never edits data on its own)")
 

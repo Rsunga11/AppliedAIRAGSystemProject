@@ -3,7 +3,7 @@
 import json
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 PRIORITIES = ("low", "medium", "high")
 FREQUENCIES = ("once", "daily", "weekly")
@@ -67,6 +67,19 @@ class Task:
         data = dict(data)
         data["due_date"] = date.fromisoformat(data["due_date"])
         return cls(**data)
+
+    def is_open_on(self, day: date) -> bool:
+        """True if this task is due on `day` and not yet done (the only tasks that can clash)."""
+        return self.due_date == day and not self.completed
+
+    def minute_range(self) -> Tuple[int, int]:
+        """Return (start, end) in minutes after midnight."""
+        start = to_minutes(self.time)
+        return start, start + self.duration_minutes
+
+    def overlaps(self, other: "Task") -> bool:
+        """True if the two tasks' time ranges overlap (uses ranges_overlap)."""
+        return ranges_overlap(*self.minute_range(), *other.minute_range())
 
     def next_occurrence(self) -> Optional["Task"]:
         """Return a fresh copy due on the next day/week, or None if it doesn't repeat."""
@@ -225,16 +238,11 @@ class Scheduler:
     ) -> Optional[str]:
         """Return the earliest "HH:MM" where `duration` minutes fit between open tasks that day, or None."""
         day = day or date.today()
-        busy = [
-            (to_minutes(t.time), to_minutes(t.time) + t.duration_minutes)
-            for t in self.get_all_tasks()
-            if t.due_date == day and not t.completed
-        ]
+        busy = [t.minute_range() for t in self.get_all_tasks() if t.is_open_on(day)]
         start, window_end = to_minutes(day_start), to_minutes(day_end)
         while start + duration <= window_end:
             end = start + duration
-            # two blocks overlap when each one starts before the other ends
-            if not any(start < b_end and end > b_start for b_start, b_end in busy):
+            if not any(ranges_overlap(start, end, b_start, b_end) for b_start, b_end in busy):
                 return to_hhmm(start)
             start += step
         return None
@@ -263,6 +271,14 @@ def task_icon(description: str) -> str:
         if any(k in text for k in keywords):
             return icon
     return "🐾"
+
+
+def ranges_overlap(start_a: int, end_a: int, start_b: int, end_b: int) -> bool:
+    """The ONE definition of overlap: each range starts before the other ends.
+
+    Back-to-back ranges (one ends exactly when the next starts) do not overlap.
+    """
+    return start_a < end_b and start_b < end_a
 
 
 def to_minutes(hhmm: str) -> int:

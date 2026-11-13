@@ -36,6 +36,60 @@ Notes:
 Question: {question}
 Answer:"""
 
+# ---------------------------------------------------------------- specialized style
+# "Specialization" here means few-shot prompting plus a strict output contract (no fine-tuning).
+# The specialized PawPal Coach answers in exactly this shape, so the app's tone is consistent:
+#     Answer: <one plain sentence using only facts from the notes> Tip: <one short practical sentence>
+SPECIALIZED_TEMPLATE = """You are PawPal Coach, a calm, no-nonsense pet-care scheduling coach.
+Reply in EXACTLY this format, on a single line:
+Answer: <one plain sentence using only facts from the notes> Tip: <one short, practical scheduling tip>
+
+Hard rules:
+- Use ONLY facts that appear in the notes. If they don't answer the question, write: Answer: I'm not sure, so please ask a veterinarian. Tip: Check a trusted pet-care source.
+- No greetings, no exclamation marks, no emojis, at most 45 words in total.
+- Never give medication dosages or diagnose illnesses.
+
+Example 1
+Notes:
+- Adult dogs are usually fed twice a day, about 8 to 12 hours apart. Feeding takes 10 to 15 minutes including fresh water.
+Question: How often should I feed my dog?
+Reply: Answer: Adult dogs are usually fed twice a day, about 8 to 12 hours apart. Tip: Block 10 to 15 minutes for each meal, with fresh water.
+
+Example 2
+Notes:
+- Scoop the litter box at least once a day and fully change the litter weekly. A scoop takes 5 to 10 minutes.
+Question: How often should I clean the litter box?
+Reply: Answer: Scoop the litter box at least once a day and change the litter fully every week. Tip: Add a daily 5 to 10 minute scoop reminder.
+
+Example 3
+Notes:
+- Healthy adult cats should see a vet at least once a year.
+Question: Should I get a pet insurance plan?
+Reply: Answer: I'm not sure, so please ask a veterinarian. Tip: Check a trusted pet-care source.
+
+Now the real one.
+Notes:
+{notes}
+
+Question: {question}
+Reply:"""
+
+STYLES = {"baseline": PROMPT_TEMPLATE, "specialized": SPECIALIZED_TEMPLATE}
+MAX_SPECIALIZED_WORDS = 45
+GREETING = re.compile(r"^\s*(hello|hi|hey|hiya|greetings|good (morning|afternoon|evening))\b", re.IGNORECASE)
+SPECIALIZED_FORMAT = re.compile(r"^Answer: .+? Tip: .+$", re.DOTALL)
+
+
+def conforms_to_specialized_style(text: str) -> bool:
+    """True if `text` follows the PawPal Coach contract: one Answer + Tip line, no greeting, no '!', <= 45 words."""
+    return bool(
+        SPECIALIZED_FORMAT.match(text.strip())
+        and "\n" not in text.strip()
+        and "!" not in text
+        and not GREETING.match(text)
+        and len(text.split()) <= MAX_SPECIALIZED_WORDS
+    )
+
 
 def load_dotenv(path: str = ".env") -> None:
     """Load KEY=VALUE lines from a .env file into os.environ (existing variables win)."""
@@ -53,18 +107,33 @@ def load_dotenv(path: str = ".env") -> None:
 class GeminiClient:
     """Tiny Gemini REST client using only the standard library."""
 
-    def __init__(self, api_key: str, model: Optional[str] = None, timeout: float = 15.0, opener=None):
+    def __init__(
+        self,
+        api_key: str,
+        model: Optional[str] = None,
+        timeout: float = 15.0,
+        opener=None,
+        style: str = "specialized",
+    ):
+        if style not in STYLES:
+            raise ValueError(f"style must be one of {sorted(STYLES)}")
+        self.style = style  # "baseline" = plain prompt, "specialized" = few-shot PawPal Coach
         self._api_key = api_key  # private: never printed or logged
         self.model = model or os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
         self.timeout = timeout
         self._open = opener or urllib.request.urlopen
 
-    def explain(self, question: str, snippets: List[str]) -> Optional[str]:
-        """Return a short answer grounded in `snippets`, or None if anything goes wrong."""
+    def explain(self, question: str, snippets: List[str], enforce_style: bool = True) -> Optional[str]:
+        """Return a short answer grounded in `snippets`, or None if anything goes wrong.
+
+        In "specialized" style the reply must follow the PawPal Coach format; if it doesn't and
+        `enforce_style` is True, None is returned so the advisor uses its offline answer instead.
+        (The comparison script passes enforce_style=False to measure raw compliance.)
+        """
         notes = "\n".join(f"- {s}" for s in snippets)
         body = json.dumps(
             {
-                "contents": [{"parts": [{"text": PROMPT_TEMPLATE.format(notes=notes, question=question)}]}],
+                "contents": [{"parts": [{"text": STYLES[self.style].format(notes=notes, question=question)}]}],
                 "generationConfig": {"temperature": 0.2, "maxOutputTokens": 300},
             }
         ).encode("utf-8")
@@ -87,6 +156,9 @@ class GeminiClient:
 
         if not text or UNSAFE_OUTPUT.search(text):
             logger.warning("gemini answer rejected by output guardrail (falling back to offline answer)")
+            return None
+        if self.style == "specialized" and enforce_style and not conforms_to_specialized_style(text):
+            logger.warning("gemini answer broke the specialized style contract (falling back to offline answer)")
             return None
         return text[:MAX_ANSWER_CHARS]
 

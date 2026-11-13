@@ -109,8 +109,9 @@ class Answer:
     text: str
     confidence: float
     sources: List[str]
-    refused: bool = False
+    refused: bool = False  # a guardrail decided not to answer (safe, expected)
     used_llm: bool = False
+    error: bool = False  # something broke internally (a bug or outage, not a refusal)
 
     @property
     def needs_review(self) -> bool:
@@ -269,7 +270,7 @@ class CareAdvisor:
             return Answer(text, confidence, sources, used_llm=used_llm)
         except Exception:  # never crash the app because of one bad question
             logger.exception("answer_question failed")
-            return Answer("Sorry, something went wrong answering that. Please try again.", 0.0, [], refused=True)
+            return Answer("Sorry, something went wrong answering that. Please try again.", 0.0, [], error=True)
 
     @staticmethod
     def _compose_offline(chunk: Chunk, question: str = "") -> str:

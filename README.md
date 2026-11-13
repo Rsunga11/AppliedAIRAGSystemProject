@@ -8,12 +8,13 @@ PawPal+ Care Advisor adds an AI layer on top of that scheduler so the app can *r
 
 1. **RAG (retrieval-augmented generation).** Questions and task checks are answered from a small pet-care knowledge base (`knowledge/*.md`). The retriever finds the most relevant sections, and the numbers it finds there (like "30-60 minutes of walking a day") are parsed and used to review tasks and to propose a routine.
 2. **Agentic workflow.** A care-plan agent plans a routine for a pet, tries it in a scratch copy of the schedule, checks its own work for overlaps, re-plans around problems, and then **waits for the human to approve** before anything is added.
-3. **Reliability and guardrails.** Confidence scores, source citations, refusal of medical questions, "I don't know" answers outside the notes, logging, an automated test suite (92 tests) and an evaluation harness (35 predefined cases).
+3. **Reliability and guardrails.** Confidence scores, source citations, refusal of medical questions, "I don't know" answers outside the notes, logging, an automated test suite (102 tests) and an evaluation harness (35 predefined cases).
 
 An optional step lets **Gemini** rewrite the retrieved notes into a friendly answer when `GEMINI_API_KEY` is set. Without a key everything runs fully offline.
 
 ## Architecture overview
 
+<!-- BEGIN:architecture -->
 ```mermaid
 flowchart TD
     User([Pet owner])
@@ -37,13 +38,13 @@ flowchart TD
         Advisor["Care Advisor: answer, review task, propose tasks (advisor.py)"]
         Conf["Confidence score and source citations"]
         Agent["Care Plan Agent: plan, act, check, re-plan (agent.py)"]
-        Gemini["Optional Gemini rewrite (llm.py)"]
-        OutGuard["Output guardrail and offline fallback"]
+        Gemini["Optional Gemini rewrite: baseline or few-shot specialized style (llm.py)"]
+        OutGuard["Output guardrail, style-contract check and offline fallback"]
     end
 
     Log[("logs/pawpal.log")]
     Human{{"Human approves proposals"}}
-    Tests["pytest suite (92 tests) and eval results"]
+    Tests["pytest suite and eval results"]
 
     User --> App
     User --> CLI
@@ -78,13 +79,14 @@ flowchart TD
     Agent -.-> Log
     Gemini -.-> Log
 
-    Harness -->|35 predefined cases| Guard
+    Harness -->|predefined cases| Guard
     Harness --> Advisor
     Harness --> Agent
     Harness -->|pass/fail summary| Tests
     Tests -.->|verifies| AI
     Tests -.->|verifies| Core
 ```
+<!-- END:architecture -->
 
 (The source is in [`diagrams/architecture.mmd`](diagrams/architecture.mmd).)
 
@@ -129,25 +131,28 @@ These are real outputs of `python main.py` in offline mode (no API key).
 
 Input: three questions. Output: answers built from retrieved notes, with a confidence score and sources. The third question is outside the notes, so the system says so instead of guessing.
 
+<!-- BEGIN:rag -->
 ```
 == RAG: questions answered from the knowledge base ==
 Q: How long should I walk my dog?
-A: Most adult dogs need 30 to 60 minutes of walking or active play each day, ideally split into two walks (morning and evening). A walk shorter than 15 minutes is usually not enough exercise for an adult dog.
+A: Answer: Most adult dogs need 30 to 60 minutes of walking or active play each day. Tip: Split walks into a morning and evening session.
    confidence=0.82 needs_review=False sources=['dog_care.md: Dog walks and exercise', 'dog_care.md: Dog grooming and bathing', 'dog_care.md: Dog vet visits']
 
 Q: How often should I feed my cat?
-A: Adult cats are usually fed two measured meals a day, about 10 to 12 hours apart, for example breakfast around 08:00 and dinner around 18:30. A feeding takes 5 to 10 minutes including fresh water.
+A: Answer: Adult cats are usually fed two measured meals a day, about 10 to 12 hours apart. Tip: Set two daily meal reminders.
    confidence=0.93 needs_review=False sources=['cat_care.md: Cat feeding', 'cat_care.md: Cat grooming', 'cat_care.md: Cat vet visits']
 
 Q: Why is the sky blue?
 A: I couldn't find reliable guidance for that in my pet-care notes. Please ask a veterinarian or check a trusted pet-care source.
    confidence=0.00 needs_review=True sources=none
 ```
+<!-- END:rag -->
 
 ### 2. Guardrails: medical, empty and overlong input
 
 Input: a dosage question, an empty question and a 1,000-character question. Output: all three are refused (the medical one with a vet referral) before any retrieval happens.
 
+<!-- BEGIN:guardrails -->
 ```
 == Guardrails ==
 Q: 'How much ibuprofen can I give my dog?'
@@ -159,22 +164,26 @@ Q: ''
 Q: 'walk walk walk walk walk walk ...(long)'
    refused=True: Please keep questions under 500 characters.
 ```
+<!-- END:guardrails -->
 
 ### 3. RAG-backed task review
 
 Input: a 5-minute "Quick walk" for a dog. The advisor retrieved the dog-walk section, parsed its recommended range (30-60 minutes) and warned.
 
+<!-- BEGIN:review -->
 ```
 == RAG-backed review of a task ==
 'Quick walk' (5 min) for a dog -> WARN (confidence 0.95)
    5 min is shorter than the usual 30-60 min for a dog (Dog walks and exercise).
    source: ['dog_care.md: Dog walks and exercise']
 ```
+<!-- END:review -->
 
 ### 4. Agent: plan, act, check, re-plan, then human approval
 
 Input: "suggest a plan" for a dog named Rex who already has a 07:30 vet call. The agent proposes five tasks, finds overlaps in its own plan, moves tasks to free slots, re-checks, and leaves the real data untouched until approval. Then the human approves three proposals.
 
+<!-- BEGIN:agent -->
 ```
 == Agent: plan -> act -> check -> re-plan (proposals only) ==
 Agent trace for Rex:
@@ -195,12 +204,13 @@ Tasks on Rex BEFORE approval: 1 (only the existing 'Vet call'; the agent never e
 == Human approval: approve the first 3 proposals ==
 Added: ['Morning walk', 'Evening walk', 'Morning feeding']
    Date  Time   Task                   Pet        Min  Priority
-⏳ 11-05 07:30  🏥 Vet call             Rex         20  🔴 high
-⏳ 11-05 08:15  🦮 Morning walk         Rex         45  🔴 high
-⏳ 11-05 09:00  🍽️ Morning feeding     Rex         12  🔴 high
-⏳ 11-05 18:30  🦮 Evening walk         Rex         45  🔴 high
+⏳ 11-13 07:30  🏥 Vet call             Rex         20  🔴 high
+⏳ 11-13 08:15  🦮 Morning walk         Rex         45  🔴 high
+⏳ 11-13 09:00  🍽️ Morning feeding     Rex         12  🔴 high
+⏳ 11-13 18:30  🦮 Evening walk         Rex         45  🔴 high
 Overlaps involving the newly added tasks: none
 ```
+<!-- END:agent -->
 
 ### 5. Optional: the same questions with Gemini turned on
 
@@ -230,6 +240,7 @@ Every fact in the Gemini answers came from the retrieved notes (including the ki
 
 `python eval_harness.py` runs 35 predefined cases in offline mode and saves the output to [`logs/eval_results.txt`](logs/eval_results.txt):
 
+<!-- BEGIN:eval -->
 ```
 PawPal+ Care Advisor: reliability evaluation (offline mode)
 ======================================================================================================================
@@ -283,14 +294,17 @@ Retrieval vs no-retrieval baseline (does the answer contain the expected fact?)
   with retrieval (RAG): 10/10
   without retrieval:    0/10
 ```
+<!-- END:eval -->
 
 `python -m pytest`:
 
+<!-- BEGIN:pytest -->
 ```
-........................................................................ [ 78%]
-....................                                                     [100%]
-92 passed in 0.18s
+........................................................................ [ 70%]
+..............................                                           [100%]
+102 passed in 0.23s
 ```
+<!-- END:pytest -->
 
 Other reliability measures:
 
@@ -310,16 +324,41 @@ Other reliability measures:
 
 ## Testing summary
 
-- **What worked:** 92 pytest tests pass (the original 23 scheduler tests plus tests for retrieval, the advisor and its guardrails, the agent loop, the Gemini wrapper with mocked failures, and logging). The harness passes 35 of 35 cases, and retrieval answers contained the expected fact in 10 of 10 questions versus 0 of 10 for a no-retrieval baseline.
+- **What worked:** 102 pytest tests pass (the original 23 scheduler tests plus tests for retrieval, the advisor and its guardrails, the agent loop, the Gemini wrapper with mocked failures, and logging). The harness passes 35 of 35 cases, and retrieval answers contained the expected fact in 10 of 10 questions versus 0 of 10 for a no-retrieval baseline.
 - **What didn't, at first:** the harness passed on my first set of cases, so I tried harder, tricky inputs. That found real gaps: "Can I give my dog ibuprofen?", "Is tylenol ok for my cat?" and "my dog ate a grape" were *not* refused; "What should I feed my goldfish?" was answered with dog feeding advice at 0.73 confidence; and "How many meals does a puppy need?" returned the adult-dog sentences. I fixed these (broader medical patterns, an unsupported-animal check, picking the sentences that best match the question) and kept every one of those inputs as a regression test and harness case. A separate bug was found when running the demo: the agent was reporting overlaps between *other* tasks as its own unresolved problems, so it now only counts overlaps that involve tasks it proposed.
 - **A live-API lesson:** my first default model name (`gemini-2.0-flash`) returned HTTP 404 for a new key, and the next one I tried (`gemini-2.5-flash`) did too, with the message "no longer available to new users". The newest model returned HTTP 503 "high demand" for a while. The app kept working through all of this because every Gemini failure falls back to the offline answer (that fallback is what the mocked tests check). The fix was to default to a `-latest` alias and to list the models the key can use before choosing one.
 - **What I learned:** passing your own tests proves little, because the cases are written by the same person who wrote the code. The useful work was trying to break it. The remaining weaknesses are listed in `model_card.md`.
+
+## Changes after review
+
+Feedback on the first version pointed to a few things, and I changed them:
+
+- **One definition of "overlap."** The time-range overlap rule lived in three places (`Scheduler.next_available_slot`, `agent.overlap_pairs` and an inline check inside `CarePlanAgent.run`). It now lives in `pawpal_system.ranges_overlap`, with `Task.overlaps`, `Task.minute_range` and `Task.is_open_on` built on it, and all three callers use it, so the agent's check can never disagree with its own fix. `test_overlap_rule_is_shared_and_back_to_back_is_not_an_overlap` pins the behavior.
+- **"Refused" is no longer the same as "broke."** `Answer` has a separate `error` flag. A guardrail refusal is `refused=True` (shown as a warning); an unexpected exception is `error=True` (shown as an error, with the stack trace in `logs/pawpal.log`).
+- **Evidence is generated, not pasted.** One of my agent traces had been captured from a different setup than the one it claimed to be. `python generate_evidence.py` now re-runs the demo, the evaluation harness and pytest and rewrites the output blocks in this README and `ai_interactions.md` (between `<!-- BEGIN:... -->` markers), and the architecture diagram above is synced from `diagrams/architecture.mmd`. I run it as the last step before committing.
+- **The final UML now shows the AI layer.** `diagrams/uml_final.mmd` previously matched the original draft; it now includes `KnowledgeBase`, `CareAdvisor`, `CarePlanAgent`, `AgentResult`, `Proposal` and `GeminiClient`, and `diagrams/uml.mmd` is back to the original Phase 1 draft for comparison.
+- **Specialization stretch feature** (see below): a few-shot "PawPal Coach" style with a measured baseline-vs-specialized comparison.
 
 ## Stretch features included
 
 - **RAG enhancement:** several knowledge sources (dog care, cat care, medication and vet safety, general safety and small pets), with species-aware ranking and the structured hints used to drive behavior. Before/after: the Module 2 app accepted a 5-minute dog walk without comment; now it warns ("5 min is shorter than the usual 30-60 min for a dog") and cites `dog_care.md`. On the harness's 10 questions, answers with retrieval contained the expected fact 10/10 times versus 0/10 without it.
 - **Agentic workflow enhancement:** multi-step plan, act, check, re-plan traces are saved in [`ai_interactions.md`](ai_interactions.md).
 - **Test harness:** `eval_harness.py` (shown above).
+- **Specialization (few-shot + a strict output contract):** Gemini can answer in one of two styles. `baseline` is a plain prompt; `specialized` is "PawPal Coach": a persona, three few-shot examples (including one "I'm not sure" example) and a hard format, `Answer: <sentence> Tip: <sentence>`, with no greetings, no exclamation marks and at most 45 words. A validator (`conforms_to_specialized_style` in `llm.py`) rejects off-format replies so the advisor falls back to its offline answer. This is prompt-level specialization, not fine-tuning. `python style_comparison.py` sends the same retrieved notes through both styles and computes the metrics; the full side-by-side output is in `model_card.md` and `logs/style_comparison.txt`. Summary of the comparison (live run on 2026-11-13, 10 questions):
+
+<!-- BEGIN:style_summary -->
+```
+Summary (computed by code)
+metric                                baseline   specialized
+------------------------------------------------------------
+answers received                          9/10         10/10
+average words                             27.2          24.0
+answers starting with a greeting           8/9          0/10
+answers with an exclamation mark           9/9          0/10
+follow the Answer/Tip format               0/9         10/10
+numbers all found in the notes             9/9         10/10
+```
+<!-- END:style_summary -->
 
 ## Reflection
 

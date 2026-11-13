@@ -20,13 +20,13 @@ flowchart TD
         Advisor["Care Advisor: answer, review task, propose tasks (advisor.py)"]
         Conf["Confidence score and source citations"]
         Agent["Care Plan Agent: plan, act, check, re-plan (agent.py)"]
-        Gemini["Optional Gemini rewrite (llm.py)"]
-        OutGuard["Output guardrail and offline fallback"]
+        Gemini["Optional Gemini rewrite: baseline or few-shot specialized style (llm.py)"]
+        OutGuard["Output guardrail, style-contract check and offline fallback"]
     end
 
     Log[("logs/pawpal.log")]
     Human{{"Human approves proposals"}}
-    Tests["pytest suite (92 tests) and eval results"]
+    Tests["pytest suite and eval results"]
 
     User --> App
     User --> CLI
@@ -61,7 +61,7 @@ flowchart TD
     Agent -.-> Log
     Gemini -.-> Log
 
-    Harness -->|35 predefined cases| Guard
+    Harness -->|predefined cases| Guard
     Harness --> Advisor
     Harness --> Agent
     Harness -->|pass/fail summary| Tests

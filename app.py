@@ -189,7 +189,9 @@ question = st.text_input("Your question", placeholder="How long should I walk my
 ask_species = st.selectbox("About which pet type?", ["any", "dog", "cat", "other"])
 if st.button("Ask"):
     answer = advisor.answer_question(question, None if ask_species == "any" else ask_species)
-    if answer.refused:
+    if answer.error:
+        st.error(answer.text)  # an internal failure, logged with a stack trace in logs/pawpal.log
+    elif answer.refused:
         st.warning(answer.text)
     else:
         st.write(answer.text)

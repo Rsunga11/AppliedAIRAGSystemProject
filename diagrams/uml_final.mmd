@@ -1,4 +1,5 @@
 classDiagram
+    %% Final design: the Module 2 core (top) plus the AI layer added in this project (bottom).
     class Task {
         +str description
         +str time
@@ -9,8 +10,9 @@ classDiagram
         +bool completed
         +mark_complete()
         +next_occurrence() Task
-        +to_dict() dict
-        +from_dict(data) Task
+        +is_open_on(day) bool
+        +minute_range() tuple
+        +overlaps(other) bool
     }
 
     class Pet {
@@ -18,8 +20,6 @@ classDiagram
         +str species
         +list~Task~ tasks
         +add_task(task)
-        +to_dict() dict
-        +from_dict(data) Pet
     }
 
     class Owner {
@@ -33,19 +33,66 @@ classDiagram
 
     class Scheduler {
         +Owner owner
-        +get_all_tasks() list~Task~
-        +get_todays_schedule(today) list~Task~
         +sort_by_time(tasks) list~Task~
         +sort_by_priority_then_time(tasks) list~Task~
         +filter_tasks(pet_name, completed) list~Task~
-        +pet_for(task) Pet
         +mark_task_complete(task) Task
         +find_conflicts() list~str~
         +next_available_slot(duration, day) str
         +format_schedule(tasks) str
     }
 
+    class KnowledgeBase {
+        +list~Chunk~ chunks
+        +search(query, k, species) list~Hit~
+        +for_species_topic(species, topic) Chunk
+    }
+
+    class CareAdvisor {
+        +KnowledgeBase kb
+        +GeminiClient llm
+        +answer_question(question, species) Answer
+        +review_task(pet, task) Review
+        +recommend_tasks(pet) list~Proposal~
+        +guidance_for(species, description) Guidance
+    }
+
+    class Proposal {
+        +str description
+        +str time
+        +int duration_minutes
+        +float confidence
+        +to_task() Task
+    }
+
+    class CarePlanAgent {
+        +CareAdvisor advisor
+        +int max_rounds
+        +run(owner, pet, day) AgentResult
+        +apply(pet, result, approved) list~str~
+    }
+
+    class AgentResult {
+        +list~Proposal~ proposals
+        +list trace
+        +list unresolved
+        +confidence() float
+        +needs_review() bool
+    }
+
+    class GeminiClient {
+        +str style
+        +explain(question, snippets, enforce_style) str
+    }
+
     Owner "1" --> "*" Pet : has
     Pet "1" --> "*" Task : has
     Scheduler --> Owner : reads tasks via get_all_tasks()
-    Task ..> Task : next_occurrence() creates the next copy
+    CareAdvisor --> KnowledgeBase : retrieves from
+    CareAdvisor ..> GeminiClient : optional rewrite
+    CareAdvisor ..> Proposal : creates
+    CarePlanAgent --> CareAdvisor : asks for guidance
+    CarePlanAgent ..> Scheduler : free slots on a scratch copy
+    CarePlanAgent --> AgentResult : returns
+    AgentResult o-- Proposal
+    Proposal ..> Task : to_task() after human approval

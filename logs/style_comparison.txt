@@ -1,0 +1,74 @@
+Baseline vs specialized prompt: model gemini-flash-lite-latest, same retrieved notes, 10 questions
+====================================================================================================
+Q: How long should I walk my dog?
+  [baseline   ] Hello!
+                words=1 greeting=True exclamations=1 format_ok=False grounded_numbers=True
+  [specialized] Answer: Most adult dogs need 30 to 60 minutes of walking or active play each day. Tip: Split walks into a morning and evening routine.
+                words=25 greeting=False exclamations=0 format_ok=True grounded_numbers=True
+
+Q: How often should I feed my cat?
+  [baseline   ] Hello! Adult cats are usually fed two measured meals a day, about 10 to 12 hours apart (like breakfast at 08:00 and dinner at 18:30), though some cats do well with small meals throughout the day. Kittens need three to four meals a day.
+                words=44 greeting=True exclamations=1 format_ok=False grounded_numbers=True
+  [specialized] Answer: Adult cats are usually fed two measured meals a day, about 10 to 12 hours apart. Tip: Block 5 to 10 minutes for feeding, including fresh water.
+                words=28 greeting=False exclamations=0 format_ok=True grounded_numbers=True
+
+Q: How often should I scoop the litter box?
+  [baseline   ] Hello! You should scoop the litter box at least once a day, which takes about 5 to 10 minutes. A dirty box is a common reason cats stop using it!
+                words=30 greeting=True exclamations=2 format_ok=False grounded_numbers=True
+  [specialized] Answer: Scoop the litter box at least once a day. Tip: Schedule a daily 5 to 10 minute scoop block.
+                words=20 greeting=False exclamations=0 format_ok=True grounded_numbers=True
+
+Q: How often should a dog see the vet?
+  [baseline   ] Hello! Healthy adult dogs should see the vet at least once a year for a checkup and vaccinations, while senior dogs may need visits every six months.
+                words=27 greeting=True exclamations=1 format_ok=False grounded_numbers=True
+  [specialized] Answer: Healthy adult dogs should see a vet at least once a year for a checkup and vaccinations, while senior dogs may need visits every six months. Tip: Schedule the 60 to 90 minute visit ahead.
+                words=36 greeting=False exclamations=0 format_ok=True grounded_numbers=True
+
+Q: How often should I brush my dog?
+  [baseline   ] Hello! You should brush your dog weekly, and more often if your dog is a long-haired breed. Happy grooming!
+                words=19 greeting=True exclamations=2 format_ok=False grounded_numbers=True
+  [specialized] Answer: Brush dogs weekly, and more often for long-haired breeds. Tip: Schedule weekly grooming sessions to check skin, ears, and nails.
+                words=21 greeting=False exclamations=0 format_ok=True grounded_numbers=True
+
+Q: How often should I brush my cat?
+  [baseline   ] Hello! How often you should brush your cat depends on their fur length: short-haired cats can be brushed weekly, while long-haired cats should be brushed several times a week. Each grooming session takes about 10 to 15 minutes. Let me know if you need help scheduling any other care routines!
+                words=50 greeting=True exclamations=2 format_ok=False grounded_numbers=True
+  [specialized] Answer: Short-haired cats can be brushed weekly and long-haired cats several times a week. Tip: Schedule 10 to 15 minutes for grooming.
+                words=22 greeting=False exclamations=0 format_ok=True grounded_numbers=True
+
+Q: How much hay does my rabbit need?
+  [baseline   ] Hello! PawPal+ here! 
+
+Based on the notes, your rabbit needs fresh hay available all day long. 
+
+If you have any other specific dietary questions, I am not sure, so I suggest asking a veterinarian!
+                words=34 greeting=True exclamations=3 format_ok=False grounded_numbers=True
+  [specialized] Answer: Small pets such as rabbits need fresh hay available all day. Tip: Keep hay in a dedicated feeding spot for easy daily access.
+                words=24 greeting=False exclamations=0 format_ok=True grounded_numbers=True
+
+Q: Can my dog eat chocolate?
+  [baseline   ] No, your dog cannot eat chocolate! Chocolate is toxic to dogs. If your pet eats any, please call a vet or poison control right away.
+                words=25 greeting=False exclamations=1 format_ok=False grounded_numbers=True
+  [specialized] Answer: Chocolate is toxic to dogs and cats. Tip: Keep toxic foods out of reach.
+                words=15 greeting=False exclamations=0 format_ok=True grounded_numbers=True
+
+Q: How many meals does a puppy need?
+  [baseline   ] Hello! Puppies need three to four small meals a day, according to our care notes.
+                words=15 greeting=True exclamations=1 format_ok=False grounded_numbers=True
+  [specialized] Answer: Puppies need three to four small meals a day. Tip: Schedule three to four daily reminders for puppy meals.
+                words=20 greeting=False exclamations=0 format_ok=True grounded_numbers=True
+
+Q: How do I schedule a medication reminder?
+  [baseline   ] (no reply after retries)
+  [specialized] Answer: Put medication reminders at a high priority and give medication at the same time each day. Tip: Block 5 to 10 minutes for medication tasks, including a treat.
+                words=29 greeting=False exclamations=0 format_ok=True grounded_numbers=True
+
+Summary (computed by code)
+metric                                baseline   specialized
+------------------------------------------------------------
+answers received                          9/10         10/10
+average words                             27.2          24.0
+answers starting with a greeting           8/9          0/10
+answers with an exclamation mark           9/9          0/10
+follow the Answer/Tip format               0/9         10/10
+numbers all found in the notes             9/9         10/10

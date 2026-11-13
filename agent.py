@@ -43,19 +43,14 @@ def overlap_pairs(owner: Owner, day: date) -> list:
 
     This is stricter than Scheduler.find_conflicts(), which only compares exact start times.
     """
-    items = []
-    for pet in owner.pets:
-        for task in pet.tasks:
-            if task.due_date == day and not task.completed:
-                start = to_minutes(task.time)
-                items.append((start, start + task.duration_minutes, pet, task))
-    items.sort(key=lambda item: (item[0], item[1]))
+    items = [(pet, task) for pet in owner.pets for task in pet.tasks if task.is_open_on(day)]
+    items.sort(key=lambda item: item[1].minute_range())
     pairs = []
     for i in range(len(items)):
         for j in range(i + 1, len(items)):
-            if items[j][0] >= items[i][1]:
-                break  # sorted by start, so nothing later can overlap item i
-            pairs.append((items[i][2], items[i][3], items[j][2], items[j][3]))
+            if not items[i][1].overlaps(items[j][1]):
+                break  # sorted by start, so nothing later can overlap item i either
+            pairs.append((items[i][0], items[i][1], items[j][0], items[j][1]))
     return pairs
 
 
@@ -129,10 +124,7 @@ class CarePlanAgent:
             for p in proposals:
                 task = placed[id(p)]
                 others_overlap = any(
-                    t is not task and t.due_date == day and not t.completed
-                    and to_minutes(t.time) < to_minutes(task.time) + task.duration_minutes
-                    and to_minutes(task.time) < to_minutes(t.time) + t.duration_minutes
-                    for t in scratch.get_all_tasks()
+                    t is not task and t.is_open_on(day) and task.overlaps(t) for t in scratch.get_all_tasks()
                 )
                 if not others_overlap:
                     continue

@@ -119,7 +119,8 @@ def test_internal_errors_do_not_crash(advisor):
             raise RuntimeError("index corrupted")
 
     answer = CareAdvisor(BrokenKB()).answer_question("How long should I walk my dog?")
-    assert answer.refused and "went wrong" in answer.text
+    assert answer.error and not answer.refused  # a broken index is an error, not a guardrail refusal
+    assert "went wrong" in answer.text
 
 
 # ------------------------------------------------------------------- proposals
