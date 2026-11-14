@@ -7,6 +7,12 @@ from typing import List, Optional, Tuple
 
 PRIORITIES = ("low", "medium", "high")
 FREQUENCIES = ("once", "daily", "weekly")
+# Animals a pet can be. The advisor only has care notes for some of them (see advisor.COVERED_SPECIES).
+SPECIES = ("dog", "cat", "rabbit", "hamster", "guinea pig", "bird", "fish", "snake", "lizard", "turtle", "other")
+SPECIES_ICONS = {
+    "dog": "🐶", "cat": "🐱", "rabbit": "🐰", "hamster": "🐹", "guinea pig": "🐹", "bird": "🐦",
+    "fish": "🐟", "snake": "🐍", "lizard": "🦎", "turtle": "🐢", "other": "🐾",
+}
 FREQUENCY_DAYS = {"daily": 1, "weekly": 7}
 PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
 PRIORITY_ICONS = {"high": "🔴", "medium": "🟡", "low": "🟢"}
@@ -262,6 +268,11 @@ class Scheduler:
                 f"{task.duration_minutes:>4}  {PRIORITY_ICONS[task.priority]} {task.priority}"
             )
         return "\n".join(lines)
+
+
+def species_icon(species: str) -> str:
+    """Emoji for an animal type (a paw print if we don't know it)."""
+    return SPECIES_ICONS.get(species, "🐾")
 
 
 def task_icon(description: str) -> str:

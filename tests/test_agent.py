@@ -144,3 +144,13 @@ def test_overlap_rule_is_shared_and_back_to_back_is_not_an_overlap():
     owner, dog, _ = make_owner()
     dog.add_task(a)
     assert Scheduler(owner).next_available_slot(30, day=TODAY, day_start="07:00") == "07:30"
+
+
+def test_agent_does_not_invent_a_routine_for_a_snake(agent):
+    owner = Owner("Jordan")
+    snake = Pet("Slinky", "snake")
+    owner.add_pet(snake)
+    result = agent.run(owner, snake, day=TODAY)
+    assert result.proposals == []
+    assert "no care notes for a snake" in result.trace[0]["detail"]
+    assert snake.tasks == []

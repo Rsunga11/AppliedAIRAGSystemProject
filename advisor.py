@@ -45,6 +45,24 @@ UNSUPPORTED_ANIMALS = re.compile(
     re.IGNORECASE,
 )
 
+# The knowledge base has notes for dogs, cats and small pets (written under the species "other").
+# A rabbit uses the small-pet notes. Every other animal has NO notes, and the advisor says so
+# instead of borrowing dog or cat advice.
+SPECIES_ALIASES = {"rabbit": "other"}
+COVERED_SPECIES = {"dog", "cat", "other"}
+
+
+def knowledge_species(species: Optional[str]) -> Optional[str]:
+    """Map a pet's species to the species the notes use, or None if the notes don't cover it."""
+    key = SPECIES_ALIASES.get((species or "").lower(), (species or "").lower())
+    return key if key in COVERED_SPECIES else None
+
+
+NO_NOTES_FOR_SPECIES = (
+    "My notes cover dogs, cats and rabbits, so I can't give reliable advice for a {species}. "
+    "Please ask a veterinarian who treats {species}s."
+)
+
 TOPIC_KEYWORDS = {
     "walk": ("walk", "jog", "run "),
     "feeding": ("feed", "breakfast", "dinner", "lunch", "meal", "food"),
@@ -175,10 +193,11 @@ class CareAdvisor:
     def guidance_for(self, species: str, description: str) -> Optional[Guidance]:
         """Retrieve the best guidance chunk for a task and parse its numbers."""
         topic = detect_topic(description)
-        if topic is None:
-            return None  # unknown kind of task: say "unknown" rather than guess
-        query = f"{species} {topic} {description}"
-        for hit in self.kb.search(query, k=5, species=species):
+        notes_species = knowledge_species(species)
+        if topic is None or notes_species is None:
+            return None  # unknown task or an animal with no notes: say "unknown" rather than guess
+        query = f"{notes_species} {topic} {description}"
+        for hit in self.kb.search(query, k=5, species=notes_species):
             meta = hit.chunk.meta
             if "recommended_minutes" not in meta or meta.get("topic") != topic:
                 continue
@@ -200,6 +219,9 @@ class CareAdvisor:
     def review_task(self, pet: Pet, task: Task) -> Review:
         """Check a task's duration against guidance retrieved for the pet's species."""
         guidance = self.guidance_for(pet.species, task.description)
+        if guidance is None and knowledge_species(pet.species) is None:
+            logger.info("review pet=%s task=%r status=unknown (no notes for species %s)", pet.name, task.description, pet.species)
+            return Review("unknown", [f"I have no care notes for a {pet.species}, so this task wasn't checked."], 0.0, [])
         if guidance is None:
             logger.info("review pet=%s task=%r status=unknown (no guidance)", pet.name, task.description)
             return Review("unknown", ["No care guidance found for this task."], 0.0, [])
@@ -247,7 +269,10 @@ class CareAdvisor:
                     [],
                 )
 
-            hits = self.kb.search(question, k=3, species=species)
+            if species and knowledge_species(species) is None:
+                logger.info("guardrail: no notes for species %s", species)
+                return Answer(NO_NOTES_FOR_SPECIES.format(species=species), 0.0, [])
+            hits = self.kb.search(question, k=3, species=knowledge_species(species) if species else None)
             if not hits or hits[0].score < MIN_RETRIEVAL_SCORE:
                 logger.info("answer: no reliable match for question")
                 return Answer(
@@ -287,11 +312,15 @@ class CareAdvisor:
     def recommend_tasks(self, pet: Pet) -> List[Proposal]:
         """Propose routine tasks for this pet's species that it doesn't already have."""
         proposals: List[Proposal] = []
+        notes_species = knowledge_species(pet.species)
+        if notes_species is None:
+            logger.info("recommend pet=%s proposals=0 (no notes for species %s)", pet.name, pet.species)
+            return []
         covered = {detect_topic(t.description) for t in pet.tasks}
         for chunk in self.kb.chunks:
             meta = chunk.meta
             topic = meta.get("topic")
-            if meta.get("species") != pet.species or topic not in PROPOSAL_PRIORITY or topic in covered:
+            if meta.get("species") != notes_species or topic not in PROPOSAL_PRIORITY or topic in covered:
                 continue
             low, high = _parse_range(meta.get("recommended_minutes"))
             _, per_day = _parse_range(meta.get("recommended_per_day"))

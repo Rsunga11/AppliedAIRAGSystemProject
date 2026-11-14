@@ -3,10 +3,10 @@ from datetime import date
 
 import streamlit as st
 
-from advisor import CareAdvisor, configure_logging
+from advisor import CareAdvisor, configure_logging, knowledge_species
 from agent import CarePlanAgent, format_trace
 from llm import from_env
-from pawpal_system import PRIORITY_ICONS, Owner, Pet, Scheduler, Task, task_icon
+from pawpal_system import PRIORITY_ICONS, SPECIES, Owner, Pet, Scheduler, Task, species_icon, task_icon
 from retriever import KnowledgeBase
 
 DATA_FILE = "data.json"
@@ -36,7 +36,7 @@ def show_review(review) -> None:
     elif review.status == "ok":
         st.info("🩺 Advisor: " + " ".join(review.messages) + detail)
     else:
-        st.caption("🩺 Advisor: no care guidance for this kind of task, so it was not checked.")
+        st.caption("🩺 Advisor: " + " ".join(review.messages) + " (not checked)")
 
 
 # Streamlit reruns this whole script on every click, so the Owner has to live in
@@ -61,7 +61,7 @@ owner.name = st.text_input("Owner name", value=owner.name)
 st.subheader("1. Add a pet")
 with st.form("add_pet", clear_on_submit=True):
     pet_name = st.text_input("Pet name")
-    species = st.selectbox("Species", ["dog", "cat", "other"])
+    species = st.selectbox("Animal", SPECIES, format_func=lambda s: f"{species_icon(s)} {s}")
     if st.form_submit_button("Add pet"):
         if not pet_name.strip():
             st.error("Give your pet a name.")
@@ -73,7 +73,14 @@ with st.form("add_pet", clear_on_submit=True):
             st.success(f"Added {pet_name.strip()}!")
 
 if owner.pets:
-    st.write("Your pets: " + ", ".join(f"{p.name} ({p.species})" for p in owner.pets))
+    st.write("Your pets: " + ", ".join(f"{species_icon(p.species)} {p.name} ({p.species})" for p in owner.pets))
+    uncovered = [p for p in owner.pets if knowledge_species(p.species) is None]
+    if uncovered:
+        st.caption(
+            "The care advisor only has notes for dogs, cats and rabbits. For "
+            + ", ".join(f"{p.name} (a {p.species})" for p in uncovered)
+            + " the schedule works normally, but tasks aren't checked and no routine is suggested."
+        )
 
 # ---------------------------------------------------------------------- tasks
 st.subheader("2. Schedule a task")
@@ -186,7 +193,7 @@ st.caption(
     + ("Gemini is on: it rewrites the retrieved notes." if advisor.llm else "Offline mode: answers come straight from the notes.")
 )
 question = st.text_input("Your question", placeholder="How long should I walk my dog?")
-ask_species = st.selectbox("About which pet type?", ["any", "dog", "cat", "other"])
+ask_species = st.selectbox("About which animal?", ["any"] + list(SPECIES))
 if st.button("Ask"):
     answer = advisor.answer_question(question, None if ask_species == "any" else ask_species)
     if answer.error:

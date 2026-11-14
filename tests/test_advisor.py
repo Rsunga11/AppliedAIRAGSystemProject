@@ -210,3 +210,47 @@ def test_unsupported_animal_gets_no_borrowed_dog_advice(advisor):
 def test_answer_picks_the_sentences_that_match_the_question(advisor):
     answer = advisor.answer_question("How many meals does a puppy need?", "dog")
     assert "three to four small meals" in answer.text  # the puppy sentence, not just the adult-dog ones
+
+
+# ------------------------------------------------------------- more kinds of pets
+from advisor import knowledge_species
+from pawpal_system import SPECIES, species_icon
+
+
+def test_species_list_includes_rabbit_snake_and_friends():
+    for animal in ("dog", "cat", "rabbit", "hamster", "bird", "fish", "snake", "lizard", "turtle", "other"):
+        assert animal in SPECIES
+        assert species_icon(animal)
+    assert species_icon("dragon") == "🐾"  # unknown animals still get an icon
+
+
+def test_notes_exist_for_dogs_cats_and_rabbits_only():
+    assert knowledge_species("dog") == "dog"
+    assert knowledge_species("Cat") == "cat"
+    assert knowledge_species("rabbit") == "other"  # rabbits use the small-pet notes
+    for animal in ("snake", "hamster", "bird", "fish", "lizard", "turtle", "guinea pig"):
+        assert knowledge_species(animal) is None
+
+
+def test_rabbit_gets_small_pet_feeding_guidance(advisor):
+    review = advisor.review_task(Pet("Thumper", "rabbit"), Task("Feeding", "08:00", 12))
+    assert review.status == "ok"
+    assert review.sources == ["general_pet_safety.md: Rabbits and other small pets"]
+    assert {p.topic for p in advisor.recommend_tasks(Pet("Thumper", "rabbit"))} == {"feeding"}
+
+
+@pytest.mark.parametrize("animal", ["snake", "hamster", "bird", "fish"])
+def test_animals_without_notes_are_never_given_dog_or_cat_advice(advisor, animal):
+    pet = Pet("Slinky", animal)
+    review = advisor.review_task(pet, Task("Morning walk", "08:00", 5))
+    assert review.status == "unknown" and review.sources == [] and review.needs_review
+    assert animal in review.messages[0]
+    assert advisor.recommend_tasks(pet) == []
+    answer = advisor.answer_question("How often should I feed it?", species=animal)
+    assert answer.sources == [] and answer.confidence == 0.0 and answer.needs_review
+    assert not answer.refused and not answer.error
+
+
+def test_question_about_a_rabbit_uses_the_small_pet_notes(advisor):
+    answer = advisor.answer_question("How much hay does my rabbit need?", species="rabbit")
+    assert "hay" in answer.text.lower() and answer.sources[0].startswith("general_pet_safety.md")

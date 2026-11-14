@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Dict, List, Optional
 
-from advisor import LOW_CONFIDENCE, CareAdvisor, Proposal, logger
+from advisor import LOW_CONFIDENCE, CareAdvisor, Proposal, knowledge_species, logger
 from pawpal_system import Owner, Pet, Scheduler, to_minutes
 
 
@@ -87,7 +87,10 @@ class CarePlanAgent:
         for p in proposals:
             p.due = day
         if not proposals:
-            log(0, "plan", f"{pet.name} ({pet.species}) already has every routine task I know about, or I have no guidance.")
+            if knowledge_species(pet.species) is None:
+                log(0, "plan", f"I have no care notes for a {pet.species}, so I won't guess a routine. Please ask a veterinarian who treats {pet.species}s.")
+            else:
+                log(0, "plan", f"{pet.name} ({pet.species}) already has every routine task I know about.")
             return AgentResult(pet.name, [], trace, rounds=0)
         log(0, "plan", f"Retrieved guidance for {pet.species}; proposing {len(proposals)} task(s): "
                        + ", ".join(f"{p.description} @ {p.time}" for p in proposals))
