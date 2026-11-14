@@ -8,7 +8,7 @@ PawPal+ Care Advisor adds an AI layer on top of that scheduler so the app can *r
 
 1. **RAG (retrieval-augmented generation).** Questions and task checks are answered from a small pet-care knowledge base (`knowledge/*.md`). The retriever finds the most relevant sections, and the numbers it finds there (like "30-60 minutes of walking a day") are parsed and used to review tasks and to propose a routine.
 2. **Agentic workflow.** A care-plan agent plans a routine for a pet, tries it in a scratch copy of the schedule, checks its own work for overlaps, re-plans around problems, and then **waits for the human to approve** before anything is added.
-3. **Reliability and guardrails.** Confidence scores, source citations, refusal of medical questions, "I don't know" answers outside the notes, logging, an automated test suite (102 tests) and an evaluation harness (35 predefined cases).
+3. **Reliability and guardrails.** Confidence scores, source citations, refusal of medical questions, "I don't know" answers outside the notes, logging, an automated test suite (111 tests) and an evaluation harness (35 predefined cases).
 
 An optional step lets **Gemini** rewrite the retrieved notes into a friendly answer when `GEMINI_API_KEY` is set. Without a key everything runs fully offline.
 
@@ -139,7 +139,7 @@ A: Answer: Most adult dogs need 30 to 60 minutes of walking or active play each 
    confidence=0.82 needs_review=False sources=['dog_care.md: Dog walks and exercise', 'dog_care.md: Dog grooming and bathing', 'dog_care.md: Dog vet visits']
 
 Q: How often should I feed my cat?
-A: Answer: Adult cats are usually fed two measured meals a day, about 10 to 12 hours apart. Tip: Set two daily meal reminders.
+A: Answer: Adult cats are usually fed two measured meals a day about 10 to 12 hours apart. Tip: Set a daily breakfast and dinner alarm.
    confidence=0.93 needs_review=False sources=['cat_care.md: Cat feeding', 'cat_care.md: Cat grooming', 'cat_care.md: Cat vet visits']
 
 Q: Why is the sky blue?
@@ -300,9 +300,9 @@ Retrieval vs no-retrieval baseline (does the answer contain the expected fact?)
 
 <!-- BEGIN:pytest -->
 ```
-........................................................................ [ 70%]
-..............................                                           [100%]
-102 passed in 0.23s
+........................................................................ [ 64%]
+.......................................                                  [100%]
+111 passed in 0.27s
 ```
 <!-- END:pytest -->
 
@@ -324,10 +324,14 @@ Other reliability measures:
 
 ## Testing summary
 
-- **What worked:** 102 pytest tests pass (the original 23 scheduler tests plus tests for retrieval, the advisor and its guardrails, the agent loop, the Gemini wrapper with mocked failures, and logging). The harness passes 35 of 35 cases, and retrieval answers contained the expected fact in 10 of 10 questions versus 0 of 10 for a no-retrieval baseline.
+- **What worked:** 111 pytest tests pass (the original 23 scheduler tests plus tests for retrieval, the advisor and its guardrails, the agent loop, the Gemini wrapper with mocked failures, and logging). The harness passes 35 of 35 cases, and retrieval answers contained the expected fact in 10 of 10 questions versus 0 of 10 for a no-retrieval baseline.
 - **What didn't, at first:** the harness passed on my first set of cases, so I tried harder, tricky inputs. That found real gaps: "Can I give my dog ibuprofen?", "Is tylenol ok for my cat?" and "my dog ate a grape" were *not* refused; "What should I feed my goldfish?" was answered with dog feeding advice at 0.73 confidence; and "How many meals does a puppy need?" returned the adult-dog sentences. I fixed these (broader medical patterns, an unsupported-animal check, picking the sentences that best match the question) and kept every one of those inputs as a regression test and harness case. A separate bug was found when running the demo: the agent was reporting overlaps between *other* tasks as its own unresolved problems, so it now only counts overlaps that involve tasks it proposed.
 - **A live-API lesson:** my first default model name (`gemini-2.0-flash`) returned HTTP 404 for a new key, and the next one I tried (`gemini-2.5-flash`) did too, with the message "no longer available to new users". The newest model returned HTTP 503 "high demand" for a while. The app kept working through all of this because every Gemini failure falls back to the offline answer (that fallback is what the mocked tests check). The fix was to default to a `-latest` alias and to list the models the key can use before choosing one.
 - **What I learned:** passing your own tests proves little, because the cases are written by the same person who wrote the code. The useful work was trying to break it. The remaining weaknesses are listed in `model_card.md`.
+
+## Pet types
+
+When you add a pet you choose its animal from a list. Dogs, cats and rabbits get the full AI help (task checks, answers and suggested routines, from `knowledge/`). The other animals (hamster, guinea pig, bird, fish, snake, lizard, turtle, other) can be scheduled like any pet, but the advisor tells you it has no notes for them (`advisor.knowledge_species`), so a 5-minute "walk" for a snake is not judged against dog guidance. To support another animal, add a section for it in `knowledge/` with `species:` and `topic:` hints and list it in `advisor.COVERED_SPECIES` (a rabbit uses the small-pet notes through `SPECIES_ALIASES`).
 
 ## Changes after review
 

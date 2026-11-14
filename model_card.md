@@ -109,11 +109,12 @@ numbers all found in the notes             9/9         10/10
 ## Limitations and biases
 
 - **Tiny, hand-written knowledge base.** About 17 sections written from general pet-care guidance. It can be wrong or out of date, and it has no breed, age, size or health-condition detail (puppies and seniors are barely covered).
+- **Species coverage.** The pet list now offers 11 kinds of animals, but only dogs, cats and rabbits have care notes. For the rest the advisor deliberately says it has no notes (it never falls back to dog or cat advice), which is safer but means those pets get the scheduler and no AI help.
 - **Species bias.** Dogs and cats are covered in depth; "other" is effectively just rabbits. Reptiles, birds and fish are explicitly refused. Anything outside these gets less or no help.
 - **Keyword matching, not understanding.** Retrieval matches words, so a short or unusual question can miss (for example "can dogs have xylitol" scored too low and got an "I don't know", even though the notes cover it). The medical guardrail is a keyword pattern, so a cleverly reworded dangerous question could slip past it, and a harmless question that uses a trigger word (like "ill" or "pain") will be refused.
 - **Confidence is a heuristic, not a probability.** It combines retrieval similarity and whether the topic matched. It is not calibrated, so 0.8 does not mean "right 80% of the time".
 - **The agent is simple.** It places tasks in the next free slot, but it does not understand spacing rules (a second feeding can be pushed a few hours late) and it plans one day at a time.
-- **Test coverage is self-written.** The 35 harness cases and 102 tests were written by the same people who wrote the system, so they prove less than an independent evaluation would. Gemini behavior is covered by mocked tests, and I checked the live API by hand once (below), but a live call is not part of the automated evidence and Gemini's free tier can return 503s or retire a model name.
+- **Test coverage is self-written.** The 35 harness cases and 111 tests were written by the same people who wrote the system, so they prove less than an independent evaluation would. Gemini behavior is covered by mocked tests, and I checked the live API by hand once (below), but a live call is not part of the automated evidence and Gemini's free tier can return 503s or retire a model name.
 - **Assumes the owner's time is the only constraint** (two pets walked at once count as a conflict) and that all tasks start and end on the same day.
 
 ## Could the AI be misused, and how is that prevented?
@@ -136,7 +137,7 @@ numbers all found in the notes             9/9         10/10
 
 | Check | Result |
 |-------|--------|
-| `python -m pytest` | 102 passed (23 original scheduler tests + retrieval, advisor, agent, Gemini-wrapper and logging tests) |
+| `python -m pytest` | 111 passed (23 original scheduler tests + retrieval, advisor, agent, Gemini-wrapper and logging tests) |
 | `python eval_harness.py` | 35 of 35 cases passed (retrieval 10/10, guardrail 13/13, out-of-scope 4/4, task review 5/5, agent 3/3) |
 | Average confidence on answerable questions | 0.73 |
 | Retrieval vs. no-retrieval baseline (expected fact present) | 10/10 vs. 0/10 |
