@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 
 from retriever import KnowledgeBase, parse_document, tokenize
@@ -15,6 +17,8 @@ def test_parse_document_splits_chunks_and_reads_hints():
 species: dog
 topic: walk
 recommended_minutes: 30-60
+source_url: https://example.org/dog-walks
+reviewed_on: 2026-11-18
 
 Dogs need walks every day.
 
@@ -23,7 +27,13 @@ Plain text only.
 """
     chunks = parse_document("x.md", raw)
     assert [c.title for c in chunks] == ["Walks", "No hints"]
-    assert chunks[0].meta == {"species": "dog", "topic": "walk", "recommended_minutes": "30-60"}
+    assert chunks[0].meta == {
+        "species": "dog",
+        "topic": "walk",
+        "recommended_minutes": "30-60",
+        "source_url": "https://example.org/dog-walks",
+        "reviewed_on": "2026-11-18",
+    }
     assert chunks[0].text == "Dogs need walks every day."
     assert chunks[1].meta == {}
 
@@ -38,6 +48,15 @@ def test_knowledge_base_loads_multiple_sources(kb):
     assert len(kb.chunks) >= 15
 
 
+def test_new_and_revised_care_sections_have_source_and_review_dates(kb):
+    required_titles = {"Dog play and enrichment", "Cat fresh water", "Rabbit diet and daily routine"}
+    chunks = {chunk.title: chunk for chunk in kb.chunks if chunk.title in required_titles}
+    assert set(chunks) == required_titles
+    for chunk in chunks.values():
+        assert chunk.meta["source_url"].startswith("https://")
+        date.fromisoformat(chunk.meta["reviewed_on"])
+
+
 def test_walk_query_finds_dog_walk_section(kb):
     hits = kb.search("how long should I walk my dog", k=1, species="dog")
     assert hits[0].chunk.title == "Dog walks and exercise"
@@ -49,6 +68,12 @@ def test_species_filter_prefers_matching_species(kb):
     cat = kb.search("feeding times", k=1, species="cat")[0]
     assert dog.chunk.meta["species"] == "dog"
     assert cat.chunk.meta["species"] == "cat"
+
+
+def test_cat_water_query_finds_cited_care_section(kb):
+    hit = kb.search("How often should I refill my cat's water bowl?", k=1, species="cat")[0]
+    assert hit.chunk.title == "Cat fresh water"
+    assert "aspca.org" in hit.chunk.meta["source_url"]
 
 
 def test_off_topic_or_empty_query_returns_nothing(kb):

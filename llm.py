@@ -12,7 +12,7 @@ import os
 import re
 import urllib.error
 import urllib.request
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger("pawpal")
 
@@ -161,6 +161,52 @@ class GeminiClient:
             logger.warning("gemini answer broke the specialized style contract (falling back to offline answer)")
             return None
         return text[:MAX_ANSWER_CHARS]
+
+    def test_connection(self) -> Tuple[bool, str]:
+        """Make a minimal authenticated request and return a safe status message."""
+        if not self._api_key.strip():
+            return False, "No Gemini API key is configured."
+
+        body = json.dumps(
+            {
+                "contents": [{"parts": [{"text": "Reply with the single word OK."}]}],
+                "generationConfig": {"temperature": 0, "maxOutputTokens": 4},
+            }
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            API_URL.format(model=self.model),
+            data=body,
+            headers={"Content-Type": "application/json", "x-goog-api-key": self._api_key},
+            method="POST",
+        )
+        try:
+            with self._open(request, timeout=self.timeout) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except urllib.error.HTTPError as error:
+            logger.warning("gemini connection test failed: HTTP %s", error.code)
+            if error.code == 400:
+                return False, "Gemini rejected the request (HTTP 400). Check the configured model and API key."
+            if error.code in (401, 403):
+                return False, f"Gemini denied access (HTTP {error.code}). Check that the API key is valid and enabled."
+            if error.code == 404:
+                return False, "The configured Gemini model was not found (HTTP 404). Check GEMINI_MODEL."
+            if error.code == 429:
+                return False, "Gemini rate limit or quota reached (HTTP 429). Try again later or check your quota."
+            return False, f"Gemini returned an HTTP {error.code} error."
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            reason = error.reason if isinstance(error, urllib.error.URLError) else error
+            logger.warning("gemini connection test failed: %s", type(reason).__name__)
+            return False, "Could not reach Gemini. Check your internet connection and try again."
+        except (json.JSONDecodeError, UnicodeDecodeError, KeyError, IndexError, TypeError):
+            logger.warning("gemini connection test failed: invalid response")
+            return False, "Gemini responded, but the response was not in the expected format."
+
+        if not text:
+            logger.warning("gemini connection test failed: empty response")
+            return False, "Gemini responded without text. Try again or check model access."
+        logger.info("gemini connection test succeeded")
+        return True, "Gemini connection successful."
 
 
 def from_env() -> Optional[GeminiClient]:

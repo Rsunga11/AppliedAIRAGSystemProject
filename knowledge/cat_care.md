@@ -10,6 +10,14 @@ recommended_per_day: 2
 
 Adult cats are usually fed two measured meals a day, about 10 to 12 hours apart, for example breakfast around 08:00 and dinner around 18:30. A feeding takes 5 to 10 minutes including fresh water. Some cats do well with small meals throughout the day. Kittens need three to four meals a day.
 
+## Cat fresh water
+species: cat
+topic: hydration
+source_url: https://www.aspca.org/pet-care/cat-care/general-cat-care
+reviewed_on: 2026-11-18
+
+Provide fresh, clean water at all times, and wash and refill water bowls daily.
+
 ## Cat play and enrichment
 species: cat
 topic: play

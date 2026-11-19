@@ -31,8 +31,10 @@ species: dog
 topic: play
 recommended_minutes: 15-30
 recommended_per_day: 1
+source_url: https://www.aspca.org/pet-care/dog-care/general-dog-care
+reviewed_on: 2026-11-18
 
-Dogs benefit from at least one play or training session a day of 15 to 30 minutes, such as fetch, tug or puzzle toys. Mental enrichment reduces boredom and destructive chewing.
+Exercise needs vary by breed or mix, sex, age and health. Supervised play and games can provide mental stimulation and meet instinctive needs. For scheduling, a 15 to 30 minute play or training block is a starting point, not a universal exercise requirement; ask a veterinarian about an individual routine when needed.
 
 ## Dog vet visits
 species: dog

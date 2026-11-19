@@ -68,6 +68,14 @@ def test_normal_question_is_answered_with_sources(advisor):
     assert answer.confidence >= LOW_CONFIDENCE
 
 
+def test_new_care_guidance_cites_source_url_and_review_date(advisor):
+    answer = advisor.answer_question("How often should I refill my cat's water bowl?", species="cat")
+    assert "wash and refill water bowls daily" in answer.text
+    assert answer.sources[0].startswith("cat_care.md: Cat fresh water")
+    assert "https://www.aspca.org/pet-care/cat-care/general-cat-care" in answer.sources[0]
+    assert "reviewed 2026-11-18" in answer.sources[0]
+
+
 @pytest.mark.parametrize(
     "question",
     [
@@ -235,7 +243,8 @@ def test_notes_exist_for_dogs_cats_and_rabbits_only():
 def test_rabbit_gets_small_pet_feeding_guidance(advisor):
     review = advisor.review_task(Pet("Thumper", "rabbit"), Task("Feeding", "08:00", 12))
     assert review.status == "ok"
-    assert review.sources == ["general_pet_safety.md: Rabbits and other small pets"]
+    assert review.sources[0].startswith("general_pet_safety.md: Rabbit diet and daily routine")
+    assert "https://www.rspca.org.uk/adviceandwelfare/pets/rabbits/diet" in review.sources[0]
     assert {p.topic for p in advisor.recommend_tasks(Pet("Thumper", "rabbit"))} == {"feeding"}
 
 

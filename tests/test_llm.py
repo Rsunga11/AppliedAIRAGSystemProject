@@ -48,6 +48,82 @@ def test_successful_call_returns_text_and_sends_key_only_in_header():
     assert "ONLY the notes" in seen["prompt"]
 
 
+def test_connection_test_sends_a_minimal_prompt_and_never_puts_key_in_url():
+    seen = {}
+
+    def opener(request, timeout):
+        seen["url"] = request.full_url
+        seen["key_header"] = request.get_header("X-goog-api-key")
+        seen["prompt"] = json.loads(request.data)["contents"][0]["parts"][0]["text"]
+        seen["timeout"] = timeout
+        return reply("OK")
+
+    client = GeminiClient(SECRET, opener=opener)
+    assert client.test_connection() == (True, "Gemini connection successful.")
+    assert seen["key_header"] == SECRET
+    assert SECRET not in seen["url"]
+    assert seen["prompt"] == "Reply with the single word OK."
+    assert seen["timeout"] == client.timeout
+
+
+def test_connection_test_without_key_does_not_make_request():
+    calls = []
+    client = GeminiClient("", opener=lambda request, timeout: calls.append(request))
+
+    assert client.test_connection() == (False, "No Gemini API key is configured.")
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("status", "message_part"),
+    [
+        (400, "Check the configured model and API key"),
+        (403, "Check that the API key is valid and enabled"),
+        (404, "Check GEMINI_MODEL"),
+        (429, "quota"),
+        (500, "HTTP 500"),
+    ],
+)
+def test_connection_test_reports_actionable_http_errors(status, message_part):
+    def opener(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, status, "error", {}, None)
+
+    ok, message = GeminiClient(SECRET, opener=opener).test_connection()
+    assert not ok
+    assert message_part in message
+    assert SECRET not in message
+
+
+def test_connection_test_reports_network_and_invalid_response_failures():
+    def timeout(request, timeout):
+        raise TimeoutError("slow")
+
+    def bad_json(request, timeout):
+        return FakeResponse(b"not json")
+
+    def no_candidate_text(request, timeout):
+        return FakeResponse(b'{"candidates": []}')
+
+    for opener, expected in (
+        (timeout, "Check your internet connection"),
+        (bad_json, "not in the expected format"),
+        (no_candidate_text, "not in the expected format"),
+    ):
+        ok, message = GeminiClient(SECRET, opener=opener).test_connection()
+        assert not ok
+        assert expected in message
+
+
+def test_connection_test_never_logs_api_key(caplog):
+    def forbidden(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 403, "forbidden", {}, None)
+
+    with caplog.at_level(logging.DEBUG, logger="pawpal"):
+        GeminiClient(SECRET, opener=forbidden).test_connection()
+    assert SECRET not in caplog.text
+    assert "HTTP 403" in caplog.text
+
+
 @pytest.mark.parametrize("status", [400, 403, 429, 500])
 def test_http_errors_return_none(status):
     def opener(request, timeout):

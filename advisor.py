@@ -182,6 +182,17 @@ def _confidence(hit: Hit, topic_matches: bool) -> float:
     return round(min(0.95, hit.score * 1.2 + (0.2 if topic_matches else 0.0)), 2)  # never claims certainty
 
 
+def _source_reference(chunk: Chunk) -> str:
+    """Include provenance when a knowledge section provides it."""
+    reference = f"{chunk.source}: {chunk.title}"
+    details = []
+    if chunk.meta.get("source_url"):
+        details.append(chunk.meta["source_url"])
+    if chunk.meta.get("reviewed_on"):
+        details.append(f"reviewed {chunk.meta['reviewed_on']}")
+    return f"{reference} ({'; '.join(details)})" if details else reference
+
+
 class CareAdvisor:
     """Retrieval-backed advisor. `llm` is optional (anything with explain(question, snippets))."""
 
@@ -209,7 +220,7 @@ class CareAdvisor:
                 min_minutes=low,
                 max_minutes=high,
                 per_day=per_day or 0,
-                source=hit.chunk.source,
+                source=_source_reference(hit.chunk),
                 title=hit.chunk.title,
                 confidence=_confidence(hit, topic == meta.get("topic")),
             )
@@ -240,7 +251,7 @@ class CareAdvisor:
         status = "warn" if messages else "ok"
         if not messages:
             messages.append(f"Looks reasonable for a {pet.species} ({guidance.title}).")
-        source = f"{guidance.source}: {guidance.title}"
+        source = guidance.source
         logger.info(
             "review pet=%s task=%r status=%s confidence=%.2f source=%s",
             pet.name, task.description, status, guidance.confidence, source,
@@ -282,7 +293,7 @@ class CareAdvisor:
                     [],
                 )
 
-            sources = [f"{h.chunk.source}: {h.chunk.title}" for h in hits]
+            sources = [_source_reference(h.chunk) for h in hits]
             confidence = _confidence(hits[0], True)
             text = self._compose_offline(hits[0].chunk, question)
             used_llm = False
@@ -335,7 +346,7 @@ class CareAdvisor:
                 description = f"{part if per_day > 1 else ''}{label}".strip().capitalize()
                 proposals.append(
                     Proposal(description, time, duration, PROPOSAL_PRIORITY[topic], "daily", topic,
-                             f"{chunk.source}: {chunk.title}", confidence)
+                             _source_reference(chunk), confidence)
                 )
         logger.info("recommend pet=%s proposals=%d", pet.name, len(proposals))
         return proposals

@@ -5,7 +5,7 @@ import streamlit as st
 
 from advisor import CareAdvisor, configure_logging, knowledge_species
 from agent import CarePlanAgent, format_trace
-from llm import from_env
+from llm import GeminiClient, from_env
 from pawpal_system import PRIORITY_ICONS, SPECIES, Owner, Pet, Scheduler, Task, species_icon, task_icon
 from retriever import KnowledgeBase
 
@@ -192,6 +192,21 @@ st.caption(
     "Answers come from the pet-care notes in `knowledge/` (retrieval), not from guesswork. "
     + ("Gemini is on: it rewrites the retrieved notes." if advisor.llm else "Offline mode: answers come straight from the notes.")
 )
+if st.button("Test Gemini connection"):
+    client = advisor.llm
+    if isinstance(client, GeminiClient):
+        with st.spinner("Checking Gemini connection..."):
+            st.session_state.gemini_connection_check = client.test_connection()
+    else:
+        st.session_state.gemini_connection_check = (False, "No Gemini API key is configured. Check your .env file and restart the app.")
+if "gemini_connection_check" in st.session_state:
+    connected, status_message = st.session_state.gemini_connection_check
+    if connected:
+        st.success(status_message)
+    else:
+        st.error(status_message)
+st.caption("The connection test sends one short prompt to Gemini and uses a small amount of API quota.")
+
 question = st.text_input("Your question", placeholder="How long should I walk my dog?")
 ask_species = st.selectbox("About which animal?", ["any"] + list(SPECIES))
 if st.button("Ask"):

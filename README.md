@@ -114,6 +114,10 @@ pip install -r requirements.txt
 
 **Optional: turn on Gemini.** Copy `.env.example` to `.env` and put your own free key from aistudio.google.com in it (`GEMINI_API_KEY=...`). `.env` is git-ignored, and the key is only sent as a request header and never logged. Skip this to stay fully offline. `GEMINI_MODEL` can override the default model name (the default is the `gemini-flash-lite-latest` alias, because specific names get retired; see the testing summary).
 
+In the web app, use **Test Gemini connection** to send a short test prompt and check API access. The test uses a small amount of quota and does not display the key. Restart the app after changing `.env`; Streamlit caches the advisor when it starts.
+
+To add or revise care guidance, follow the sourcing and metadata format in [`knowledge/README.md`](knowledge/README.md). New or updated entries should cite a reputable source and include the date it was last reviewed.
+
 **Run it:**
 
 ```bash
